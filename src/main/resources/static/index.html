@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logs Stream</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="log.css" rel="stylesheet"/>
+</head>
+<body class="bg-gray-100 font-sans">
+<!-- Navbar -->
+<nav class="bg-white shadow-md">
+    <div class="container mx-auto px-4 py-2 flex justify-between items-center">
+        <a href="#" class="text-xl font-bold text-gray-800">{SUDHI.S}</a>
+        <div class="flex space-x-4">
+            <a href="#" class="text-gray-600 hover:text-gray-800">sudhis@live.com</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container-full mx-auto">
+    <div class="border border-gray-300 bg-black text-green-500 font-mono p-4 rounded-lg overflow-hidden h-full">
+        <div id="logs" class="overflow-y-auto h-full flex flex-col-reverse"></div>
+    </div>
+</div>
+
+<script src="logs.js"></script>
+</body>
+</html>
