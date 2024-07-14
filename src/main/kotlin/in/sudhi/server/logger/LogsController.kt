@@ -1,5 +1,8 @@
 package `in`.sudhi.server.logger
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -47,14 +50,18 @@ class LogsController(private val repository: LogsRepository) {
 	}
 
 	private fun sendLogToClients(log: LogEntity) {
-		val deadEmitters = mutableListOf<SseEmitter>()
-		emitters.forEach { emitter ->
-			try {
-				emitter.send(SseEmitter.event().data(log))
-			} catch (e: IOException) {
-				deadEmitters.add(emitter)
+		CoroutineScope(Dispatchers.IO).launch {
+			val deadEmitters = mutableListOf<SseEmitter>()
+			emitters.forEach { emitter ->
+				try {
+					emitter.send(SseEmitter.event().data(log))
+				} catch (e: IOException) {
+//					// Handle the exception as needed, e.g., log it
+//					println("Failed to send log to client: ${e.message}")
+					deadEmitters.add(emitter)
+				}
 			}
+			emitters.removeAll(deadEmitters.toSet())
 		}
-		emitters.removeAll(deadEmitters)
 	}
 }

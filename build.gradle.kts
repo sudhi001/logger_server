@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.springframework.boot.gradle.tasks.bundling.BootBuildImage
 
 plugins {
@@ -6,10 +7,11 @@ plugins {
 	id("io.spring.dependency-management") version "1.1.5"
 	kotlin("jvm") version kotlinVersion
 	kotlin("plugin.spring") version kotlinVersion
+	id("com.palantir.docker") version "0.36.0"
 }
 
-group = "hello"
-version = "1.0.0-SNAPSHOT"
+group = "in.sudhi.app"
+version = "1.0.1-SNAPSHOT"
 
 java {
 	toolchain {
@@ -25,6 +27,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	implementation( "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
+			implementation( "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.5.2")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
 	implementation("org.springframework.boot:spring-boot-starter-hateoas")
@@ -36,6 +40,7 @@ dependencies {
 kotlin {
 	compilerOptions {
 		freeCompilerArgs.addAll("-Xjsr305=strict")
+
 	}
 }
 
@@ -44,8 +49,19 @@ tasks.named<BootBuildImage>("bootBuildImage") {
 	builder.set("paketobuildpacks/builder-jammy-buildpackless-tiny")
 	buildpacks.set(listOf("paketobuildpacks/java"))
 }
+tasks.withType<KotlinCompile> {
+	kotlinOptions {
+		freeCompilerArgs = listOf("-Xjsr305=strict")
+		jvmTarget = "17"
+	}
+}
 
 tasks.withType<Test> {
 	useJUnitPlatform()
 }
 
+docker {
+	name = "${project.group}/${rootProject.name}:${project.version}"
+	files(tasks.bootJar.get())
+	buildArgs(mapOf("JAR_FILE" to tasks.bootJar.get().archiveFileName.get()))
+}

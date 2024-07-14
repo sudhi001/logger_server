@@ -10,7 +10,7 @@ async function fetchRecentLogs() {
         logs.reverse().forEach(log => {
             const logElement = document.createElement('div');
             logElement.className = 'log-entry p-2 border-b border-gray-700';
-            logElement.innerText = `${log.name}:${log.message}`;
+            logElement.innerText = `${log.name}${log.message}`;
             logsContainer.appendChild(logElement);
         });
         console.log('Recent logs fetched and displayed.');
@@ -29,7 +29,7 @@ eventSource.onmessage = function(event) {
     const log = JSON.parse(event.data);
     const logElement = document.createElement('div');
     logElement.className = 'log-entry p-2 border-b border-gray-700';
-    logElement.innerText = `${log.name}:${log.message}`;
+    logElement.innerText = `${log.name}${log.message}`;
     const logsContainer = document.getElementById('logs');
     logsContainer.insertBefore(logElement, logsContainer.firstChild);
 };
