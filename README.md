@@ -18,14 +18,7 @@ Follow these instructions to set up and run the Remote Logger application on you
 
 ### Prerequisites
 
-- Java 11 or higher
+- Java 17 or higher
 - Gradle
 
-### Installation
-
-1. **Clone the Repository**
-
-   ```sh
-   git clone https://github.com/yourusername/remote-logger.git
-   cd remote-logger
 
