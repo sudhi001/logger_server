@@ -193,10 +193,13 @@ action.
 
 ## What it costs
 
-Alerting needs a TLS stack for outbound HTTPS, which took the image from
-4.9 MB to 10.6 MB and idle memory from 11.1 MB to 15.1 MB. Everything else about
-the server is unchanged; nothing about alerting touches the ingest hot path
-beyond a level comparison.
+Alerting needs a TLS stack for outbound HTTPS. That cost about 5 MB of image
+when it landed, but 3.3.0 recovered it — see
+[architecture.md](architecture.md#where-the-size-went). The client is now built
+on the first delivery rather than at startup, so a server with no alert rules
+does not pay for the root certificate store at all.
+
+Nothing about alerting touches the ingest hot path beyond a level comparison.
 
 ## Settings
 

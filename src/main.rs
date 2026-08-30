@@ -6,7 +6,8 @@ use std::sync::Arc;
 use logger_server::config::Config;
 use logger_server::middleware::ratelimit;
 use logger_server::{build_state, routes};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // musl's allocator serialises badly across threads; mimalloc recovers the
 // throughput a static build would otherwise lose. Not used on glibc, where the
@@ -17,7 +18,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() -> std::process::ExitCode {
     tracing_subscriber::registry()
-        .with(EnvFilter::try_from_env("LOGGER_LOG").unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(
+            // Same `target=level` syntax as before, without the regex engine.
+            std::env::var("LOGGER_LOG")
+                .ok()
+                .and_then(|v| v.parse::<Targets>().ok())
+                .unwrap_or_else(|| Targets::new().with_default(tracing::Level::INFO)),
+        )
         .with(tracing_subscriber::fmt::layer().compact())
         .init();
 

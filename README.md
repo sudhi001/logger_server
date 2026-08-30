@@ -201,19 +201,20 @@ That matters for one practical reason: **it runs on the free tier of anything.**
 
 | | Before (JVM) | Now (Rust) |
 |---|---|---|
-| Memory, idle | ~250–400 MB | **15.1 MB** |
-| Memory, 400 people watching | — | **~21 MB** |
+| Memory, idle | ~250–400 MB | **10.6 MB** |
+| Memory, 400 people watching | — | **~17 MB** |
 | Startup | 2–5 seconds | **~25 ms** |
-| Download size | 271 MB | **~5 MB** compressed |
-| Logs accepted per second | ~2–5 k | **~38 k** (with search indexing) |
+| Download size | 271 MB | **2.4 MB** compressed |
+| Logs accepted per second | ~2–5 k | **~68 k** |
 
 Measured, not estimated — `VmRSS` read from `/proc` on the real image. If you
 want to know *how*, [docs/architecture.md](docs/architecture.md) explains the
 three ideas that do most of the work.
 
-Those numbers went up in 3.2.0: adding webhook alerting means shipping a TLS
-stack, which cost about 5 MB of image and 4 MB of resident memory. Worth it to
-be told when something breaks, but it is a real cost and not worth hiding.
+3.3.0 got these back below where they were before alerting existed, despite
+carrying a TLS stack, full-text search and an MCP server. See
+[docs/architecture.md](docs/architecture.md#where-the-size-went) for what
+actually moved the needle.
 
 ## Documentation
 
@@ -252,7 +253,7 @@ something long and random; that token is how you sign in.
 
 ```sh
 cargo run --release      # starts on :8080
-cargo test               # 58 tests
+cargo test               # 59 tests
 ```
 
 | Channel | |

@@ -152,18 +152,48 @@ fn sign(secret: &str, body: &[u8]) -> String {
 }
 
 /// Drains fired alerts and delivers them. Runs until the sender is dropped.
-pub async fn run(state: Arc<AppState>, mut rx: mpsc::Receiver<AlertEvent>) {
-    let client = match reqwest::Client::builder()
+/// Builds the HTTPS client, installing the crypto provider first.
+///
+/// rustls is compiled without a default provider so that ring is linked rather
+/// than aws-lc-rs, which is ~686 KB larger. The cost is having to install one
+/// ourselves: without this, building a client panics with "No provider set".
+/// Builds the HTTPS client with an explicitly constructed TLS configuration.
+///
+/// Two things are deliberate here rather than left to defaults:
+///
+/// * **The crypto provider.** rustls is compiled without one so that `ring` is
+///   linked instead of `aws-lc-rs`, which is ~686 KB larger. The cost is having
+///   to install it ourselves, or construction panics with "No provider set".
+/// * **The root certificates.** Left to itself, reqwest reaches for the
+///   platform verifier, which reads the operating system's trust store. The
+///   production image is `FROM scratch` and has no trust store, so that fails
+///   at runtime with an opaque "builder error" while everything works fine on a
+///   developer machine. Compiling the roots in removes the difference.
+pub fn build_client() -> reqwest::Result<reqwest::Client> {
+    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+    let _ = rustls::crypto::CryptoProvider::install_default((*provider).clone());
+
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+    let tls = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .expect("ring supports the default protocol versions")
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+
+    reqwest::Client::builder()
         .timeout(TIMEOUT)
         .user_agent(concat!("logger_server/", env!("CARGO_PKG_VERSION")))
+        .tls_backend_preconfigured(tls)
         .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!(error = %e, "cannot build the webhook client; alerting is off");
-            return;
-        }
-    };
+}
+
+pub async fn run(state: Arc<AppState>, mut rx: mpsc::Receiver<AlertEvent>) {
+    // Built on the first delivery rather than at startup: constructing it
+    // parses the bundled root certificates, which is pure cost on a server
+    // that has no alert rules — the common case.
+    let mut client: Option<reqwest::Client> = None;
 
     while let Some(event) = rx.recv().await {
         let Ok(Some(rule)) = state
@@ -172,12 +202,29 @@ pub async fn run(state: Arc<AppState>, mut rx: mpsc::Receiver<AlertEvent>) {
         else {
             continue;
         };
+
+        let client = match &client {
+            Some(c) => c,
+            None => match build_client() {
+                Ok(c) => client.insert(c),
+                Err(e) => {
+                    let mut chain = e.to_string();
+                    let mut src = std::error::Error::source(&e);
+                    while let Some(c) = src {
+                        chain.push_str(&format!(": {c}"));
+                        src = std::error::Error::source(c);
+                    }
+                    tracing::error!(error = %chain, "cannot build the webhook client; alerting is off");
+                    return;
+                }
+            },
+        };
         let secret = state
             .store
             .with_admin(|conn, _| Ok(crate::store::alerts::secret_for(conn, rule.id)))
             .unwrap_or(None);
 
-        let result = deliver(&client, &state, &rule, &event, secret.as_deref()).await;
+        let result = deliver(client, &state, &rule, &event, secret.as_deref()).await;
 
         let err = result.err();
         if let Some(ref e) = err {
@@ -299,6 +346,15 @@ mod tests {
             "a different body must differ"
         );
         assert!(sign("k", body).starts_with("sha256="));
+    }
+
+    #[test]
+    fn the_tls_client_can_actually_be_built() {
+        // rustls is compiled without a default provider so that ring is linked
+        // rather than aws-lc-rs. Forgetting to install one does not fail the
+        // build — it panics at runtime with "No provider set" and takes the
+        // delivery task down silently, which is exactly how it was found.
+        build_client().expect("building the webhook client must not panic or fail");
     }
 
     #[test]

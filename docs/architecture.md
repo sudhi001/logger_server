@@ -137,6 +137,59 @@ without. mimalloc is used only on musl, whose allocator degrades badly under
 multi-thread contention; the glibc image uses the system allocator with
 `MALLOC_ARENA_MAX=2`.
 
+## Where the size went
+
+3.3.0 cut the image roughly in half and idle memory by 28%, while carrying more
+features than the version before it. Everything here was measured, not assumed.
+
+| Change | Saved |
+|---|---|
+| `ring` instead of `aws-lc-rs` as the rustls provider | 554 KB of code |
+| Dropping HTTP/2 from the webhook client | 345 KB (`h2`) |
+| `Targets` instead of `EnvFilter` for log filtering | 219 KB (`regex-automata`, `regex-syntax`) |
+| `opt-level = "s"` instead of `3` | 1.3 MB |
+| Building the TLS client on first delivery, not at startup | ~1.9 MB resident |
+
+Net: image 10.6 MB → 5.0 MB, idle `VmRSS` 14.8 MB → 10.6 MB.
+
+Two of those are worth explaining rather than just listing.
+
+**`opt-level = "s"` costs about 9.5% of ingest throughput** — measured at
+~68,000 logs/second instead of ~75,000, over four keep-alive connections rather
+than by spawning a process per request, which is what made an earlier attempt at
+this measurement useless. Both figures are far past anything a debugging tool
+meets, and the 1.3 MB is resident on every instance for the life of the process.
+Size won.
+
+**`panic = "abort"` would save another 759 KB, and is deliberately not taken.**
+While making these changes, a panic in the webhook delivery task was contained
+by unwinding and the server carried on ingesting logs. With `abort` the whole
+process would have died. A log sink's entire value is being the thing still
+running when something else breaks, so it keeps its unwinding tables.
+
+**HTTP/2 was not free to remove either** — it is genuinely unnecessary here,
+because every webhook target (Slack, Discord, PagerDuty) is happy with
+HTTP/1.1, and the server's own listener was already HTTP/1-only.
+
+### The bug this nearly shipped
+
+Choosing `ring` means compiling rustls without a default crypto provider, which
+must then be installed at runtime. Missing that does not fail the build: it
+panics with "No provider set" the first time an alert fires, and alerting dies
+silently while everything else keeps working.
+
+Worse, the fix exposed a second one. Left to its own devices, `reqwest` reaches
+for the platform certificate verifier, which reads the operating system's trust
+store. The production image is `FROM scratch` and has no trust store, so TLS
+worked perfectly on a development machine and failed in the container with an
+opaque "builder error". The client now builds its TLS configuration explicitly
+against root certificates compiled into the binary, and there is a test that
+constructs it so neither failure can return quietly.
+
+The general lesson is narrower than "test in production": *anything that reads
+the host environment behaves differently in a scratch image, and only testing
+the actual artifact finds it.*
+
 ## Choices worth defending
 
 **SQLite, not Postgres.** The workload is append-mostly with a bounded working

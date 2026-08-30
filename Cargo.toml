@@ -1,6 +1,6 @@
 [package]
 name = "logger_server"
-version = "3.2.1"
+version = "3.3.0"
 edition = "2021"
 rust-version = "1.80"
 description = "Self-hosted remote logger for mobile apps: live browser tail, per-device tokens, webhook alerting, and an MCP endpoint for AI agents"
@@ -48,9 +48,20 @@ getrandom = "0.4"
 # Outbound webhook delivery. rustls with compiled-in roots is not a preference:
 # the scratch image has no CA bundle, so the system trust store is not there to
 # read. default-features off keeps native-tls and cookies out of the binary.
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "webpki-roots", "json", "charset", "http2"] }
+# rustls-no-provider + an explicit ring provider: aws-lc-rs is ~686 KB of C and
+# assembly, and ring does the same job here in a fraction of the space. No
+# http2 — every webhook target speaks HTTP/1.1 — and no charset, because we POST
+# JSON and never read the response body.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "webpki-roots", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+# Root certificates compiled into the binary. The scratch image has no system
+# trust store, so these are the only roots available at runtime.
+webpki-roots = "1"
 url = "2"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+# `env-filter` pulls regex-automata and regex-syntax, ~219 KB, to support
+# filter syntax this server does not use. `Targets` parses the same
+# `target=level` form without a regex engine.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { version = "0.1", default-features = false, optional = true }
@@ -68,7 +79,10 @@ http-body-util = "0.1"
 tokio = { version = "1", features = ["io-util"] }
 
 [profile.release]
-opt-level = 3
+# "s" over 3: measured at ~68k logs/second instead of ~75k, a 9.5% cost, for
+# 1.3 MB less binary. Both numbers are far past what a debugging tool sees, and
+# the binary is file-backed resident memory on every instance, permanently.
+opt-level = "s"
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
