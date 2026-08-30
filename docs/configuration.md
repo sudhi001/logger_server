@@ -36,6 +36,18 @@ server starts correctly with nothing set — though you should always set
 > this on fixes that. Turning it on when you are *not* behind a trusted proxy
 > makes the limiter trivially bypassable, since anyone can spoof the header.
 
+## AI agents (MCP)
+
+| Variable | Default | What it does |
+|---|---|---|
+| `LOGGER_MCP_ENABLED` | `true` | Serve the `/mcp` endpoint at all |
+| `LOGGER_MCP_MODE` | `admin` | `read`, `write`, or `admin` — what an agent may do |
+
+> `read` lets an agent search, read and aggregate but change nothing, and is the
+> right choice unless you specifically want an agent creating and revoking
+> device tokens. Agents read log text, which is influenced by whatever your app
+> was given; see [agents.md](agents.md) for the trade-off in full.
+
 ## Retention
 
 | Variable | Default | What it does |

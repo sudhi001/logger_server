@@ -126,18 +126,20 @@ fn insert_all(conn: &mut Connection, batch: &[WriteItem]) -> rusqlite::Result<()
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "INSERT OR REPLACE INTO logs (id, ts, name, level, message, device_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT OR REPLACE INTO logs (id, ts, name, level, message, device_id, context)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         )?;
         for item in batch {
             let r = &item.rec;
+            let context = r.context.as_ref().map(|c| c.to_string());
             stmt.execute(rusqlite::params![
                 r.id,
                 r.ts,
                 r.name,
                 r.level,
                 r.message,
-                r.device_id
+                r.device_id,
+                context
             ])?;
         }
     }

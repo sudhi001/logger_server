@@ -14,6 +14,9 @@ use crate::model::{now_millis, BatchAck, IngestAck, LogRecord, NewLog};
 use crate::state::AppState;
 use crate::store::devices::DeviceIdentity;
 
+/// Keeps one caller from turning the context column into a blob store.
+const MAX_CONTEXT_BYTES: usize = 8 * 1024;
+
 #[derive(Debug, Deserialize, Default)]
 pub struct IngestParams {
     /// Wait for the row to be committed before responding.
@@ -51,6 +54,23 @@ fn to_record(
         input.name
     };
 
+    // Only an object is accepted: a bare string or array would make the column
+    // useless to query later, and silently storing it would hide the mistake.
+    let context = match input.context {
+        None | Some(serde_json::Value::Null) => None,
+        Some(v @ serde_json::Value::Object(_)) => {
+            let encoded = v.to_string();
+            if encoded.len() > MAX_CONTEXT_BYTES {
+                return Err(AppError::BadRequest(format!(
+                    "context is {} bytes, over the {MAX_CONTEXT_BYTES} limit",
+                    encoded.len()
+                )));
+            }
+            Some(v)
+        }
+        Some(_) => return Err(AppError::BadRequest("context must be a JSON object".into())),
+    };
+
     Ok(LogRecord {
         id,
         ts: input.ts.unwrap_or_else(now_millis),
@@ -62,6 +82,7 @@ fn to_record(
         // one device cannot attribute its logs to another.
         device_id: Some(device.id),
         device: Some(device.name.clone()),
+        context,
     })
 }
 

@@ -8,8 +8,59 @@ use rusqlite::Connection;
 use tokio::sync::{mpsc, Semaphore};
 
 use crate::error::AppError;
-use crate::model::LogRecord;
+use crate::model::{LevelCount, LogContext, LogRecord, LogStats, NamedCount};
 use crate::store::schema;
+
+/// A search request. Every field is optional; together they cover "find me the
+/// logs matching X, from device Y, between these times".
+#[derive(Debug, Clone, Default)]
+pub struct SearchQuery {
+    pub text: Option<String>,
+    pub min_level: Option<u8>,
+    pub device_id: Option<i64>,
+    pub name: Option<String>,
+    pub since: Option<i64>,
+    pub until: Option<i64>,
+    pub before_id: Option<i64>,
+    pub limit: i64,
+}
+
+impl SearchQuery {
+    /// Turns free text into an FTS5 expression.
+    ///
+    /// The input is user text, not query syntax, so every token is quoted —
+    /// which both escapes FTS operators and stops a stray quote from being a
+    /// syntax error. A trailing `*` on the last token makes search-as-you-type
+    /// behave the way people expect.
+    pub fn fts_expression(&self) -> Option<String> {
+        let raw = self.text.as_deref()?.trim();
+        if raw.is_empty() {
+            return None;
+        }
+        let tokens: Vec<String> = raw
+            .split_whitespace()
+            .map(|t| t.replace('"', "\"\""))
+            .filter(|t| !t.is_empty())
+            .collect();
+        if tokens.is_empty() {
+            return None;
+        }
+        let last = tokens.len() - 1;
+        let expr = tokens
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                if i == last {
+                    format!("\"{t}\"*")
+                } else {
+                    format!("\"{t}\"")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        Some(expr)
+    }
+}
 
 /// Rows accumulated per chunk pushed to the client during an export.
 const EXPORT_CHUNK_ROWS: usize = 256;
@@ -84,7 +135,7 @@ impl Reader {
     ) -> Result<Vec<LogRecord>, AppError> {
         self.with_conn(move |conn| {
             let mut stmt = conn.prepare_cached(
-                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
                  FROM logs l LEFT JOIN devices d ON d.id = l.device_id
                  WHERE l.id < ?1
                    AND l.level >= ?2
@@ -112,7 +163,7 @@ impl Reader {
         self.with_conn(move |conn| {
             // Served by idx_logs_name_id; the original service full-scanned here.
             let mut stmt = conn.prepare_cached(
-                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
                  FROM logs l LEFT JOIN devices d ON d.id = l.device_id
                  WHERE l.name = ?1 AND l.id < ?2
                  ORDER BY l.id DESC LIMIT ?3",
@@ -129,12 +180,208 @@ impl Reader {
     pub async fn since_id(&self, after_id: i64, limit: i64) -> Result<Vec<LogRecord>, AppError> {
         self.with_conn(move |conn| {
             let mut stmt = conn.prepare_cached(
-                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
                  FROM logs l LEFT JOIN devices d ON d.id = l.device_id
                  WHERE l.id > ?1 ORDER BY l.id ASC LIMIT ?2",
             )?;
             let out = collect(stmt.query(rusqlite::params![after_id, limit])?);
             out
+        })
+        .await
+    }
+
+    /// Full-text search with the usual filters layered on top.
+    ///
+    /// `query` is matched against the FTS index; the rest narrow the result.
+    /// All of it is optional, so this doubles as the general-purpose "find me
+    /// logs matching X" endpoint.
+    pub async fn search(&self, q: SearchQuery) -> Result<Vec<LogRecord>, AppError> {
+        self.with_conn(move |conn| {
+            let mut sql = String::from(
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
+                 FROM logs l LEFT JOIN devices d ON d.id = l.device_id ",
+            );
+            let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+            sql.push_str("WHERE 1=1 ");
+
+            // A subquery rather than a join: SQLite requires the FTS table's
+            // real name on the left of MATCH, which an alias in a JOIN makes
+            // easy to get wrong.
+            if let Some(fts) = q.fts_expression() {
+                sql.push_str("AND l.id IN (SELECT rowid FROM logs_fts WHERE logs_fts MATCH ?1) ");
+                params.push(Box::new(fts));
+            }
+
+            let mut n = params.len();
+            let bind = |sql: &mut String,
+                        clause: &str,
+                        v: Box<dyn rusqlite::ToSql>,
+                        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
+                        n: &mut usize| {
+                *n += 1;
+                sql.push_str(&clause.replace('?', &format!("?{n}")));
+                params.push(v);
+            };
+
+            if let Some(v) = q.before_id {
+                bind(&mut sql, "AND l.id < ? ", Box::new(v), &mut params, &mut n);
+            }
+            if let Some(v) = q.min_level {
+                bind(
+                    &mut sql,
+                    "AND l.level >= ? ",
+                    Box::new(v),
+                    &mut params,
+                    &mut n,
+                );
+            }
+            if let Some(v) = q.device_id {
+                bind(
+                    &mut sql,
+                    "AND l.device_id = ? ",
+                    Box::new(v),
+                    &mut params,
+                    &mut n,
+                );
+            }
+            if let Some(v) = q.name.clone() {
+                bind(
+                    &mut sql,
+                    "AND l.name = ? ",
+                    Box::new(v),
+                    &mut params,
+                    &mut n,
+                );
+            }
+            if let Some(v) = q.since {
+                bind(&mut sql, "AND l.ts >= ? ", Box::new(v), &mut params, &mut n);
+            }
+            if let Some(v) = q.until {
+                bind(&mut sql, "AND l.ts <= ? ", Box::new(v), &mut params, &mut n);
+            }
+
+            n += 1;
+            sql.push_str(&format!("ORDER BY l.id DESC LIMIT ?{n}"));
+            params.push(Box::new(q.limit));
+
+            let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|b| b.as_ref()).collect();
+            let mut stmt = conn.prepare(&sql)?;
+            let out = collect(stmt.query(refs.as_slice())?);
+            out
+        })
+        .await
+    }
+
+    /// The lines immediately around one log line.
+    pub async fn context(
+        &self,
+        id: i64,
+        before: i64,
+        after: i64,
+    ) -> Result<Option<LogContext>, AppError> {
+        self.with_conn(move |conn| {
+            let mut one = conn.prepare_cached(
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
+                 FROM logs l LEFT JOIN devices d ON d.id = l.device_id WHERE l.id = ?1",
+            )?;
+            let matched = collect(one.query([id])?)?;
+            let Some(matched) = matched.into_iter().next() else {
+                return Ok(None);
+            };
+
+            let mut prev = conn.prepare_cached(
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
+                 FROM logs l LEFT JOIN devices d ON d.id = l.device_id
+                 WHERE l.id < ?1 ORDER BY l.id DESC LIMIT ?2",
+            )?;
+            // Queried newest-first for the index, then flipped so the caller
+            // reads them in the order they happened.
+            let mut before_rows = collect(prev.query(rusqlite::params![id, before])?)?;
+            before_rows.reverse();
+
+            let mut next = conn.prepare_cached(
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
+                 FROM logs l LEFT JOIN devices d ON d.id = l.device_id
+                 WHERE l.id > ?1 ORDER BY l.id ASC LIMIT ?2",
+            )?;
+            let after_rows = collect(next.query(rusqlite::params![id, after])?)?;
+
+            Ok(Some(LogContext {
+                before: before_rows,
+                matched,
+                after: after_rows,
+            }))
+        })
+        .await
+    }
+
+    /// Aggregates over a time window.
+    pub async fn stats(
+        &self,
+        since: Option<i64>,
+        until: Option<i64>,
+    ) -> Result<LogStats, AppError> {
+        self.with_conn(move |conn| {
+            let lo = since.unwrap_or(i64::MIN);
+            let hi = until.unwrap_or(i64::MAX);
+
+            let (total, first_ts, last_ts) = conn.query_row(
+                "SELECT COUNT(*), MIN(ts), MAX(ts) FROM logs WHERE ts >= ?1 AND ts <= ?2",
+                rusqlite::params![lo, hi],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )?;
+
+            let mut by_level = Vec::new();
+            let mut stmt = conn.prepare(
+                "SELECT level, COUNT(*) FROM logs WHERE ts >= ?1 AND ts <= ?2
+                 GROUP BY level ORDER BY level",
+            )?;
+            let mut rows = stmt.query(rusqlite::params![lo, hi])?;
+            while let Some(row) = rows.next()? {
+                let level: u8 = row.get(0)?;
+                by_level.push(LevelCount {
+                    level,
+                    label: crate::model::level_label(level),
+                    count: row.get(1)?,
+                });
+            }
+
+            let named = |sql: &str| -> Result<Vec<NamedCount>, AppError> {
+                let mut out = Vec::new();
+                let mut stmt = conn.prepare(sql)?;
+                let mut rows = stmt.query(rusqlite::params![lo, hi])?;
+                while let Some(row) = rows.next()? {
+                    out.push(NamedCount {
+                        name: row
+                            .get::<_, Option<String>>(0)?
+                            .unwrap_or_else(|| "(none)".into()),
+                        count: row.get(1)?,
+                    });
+                }
+                Ok(out)
+            };
+
+            let by_device = named(
+                "SELECT d.name, COUNT(*) FROM logs l LEFT JOIN devices d ON d.id = l.device_id
+                 WHERE l.ts >= ?1 AND l.ts <= ?2 GROUP BY l.device_id
+                 ORDER BY COUNT(*) DESC LIMIT 50",
+            )?;
+            let by_name = named(
+                "SELECT name, COUNT(*) FROM logs WHERE ts >= ?1 AND ts <= ?2
+                 GROUP BY name ORDER BY COUNT(*) DESC LIMIT 50",
+            )?;
+
+            Ok(LogStats {
+                total,
+                since,
+                until,
+                first_ts,
+                last_ts,
+                by_level,
+                by_device,
+                by_name,
+            })
         })
         .await
     }
@@ -184,6 +431,12 @@ impl Reader {
     }
 }
 
+/// Stored context is text; a row written before validation existed, or hand
+/// edited, should not fail the whole query.
+fn parse_context(raw: Option<String>) -> Option<serde_json::Value> {
+    raw.and_then(|t| serde_json::from_str(&t).ok())
+}
+
 fn collect(mut rows: rusqlite::Rows<'_>) -> Result<Vec<LogRecord>, AppError> {
     let mut out = Vec::new();
     while let Some(row) = rows.next()? {
@@ -195,6 +448,7 @@ fn collect(mut rows: rusqlite::Rows<'_>) -> Result<Vec<LogRecord>, AppError> {
             message: row.get(4)?,
             device_id: row.get(5)?,
             device: row.get(6)?,
+            context: parse_context(row.get::<_, Option<String>>(7)?),
         });
     }
     Ok(out)
@@ -209,7 +463,7 @@ fn stream_rows(
 ) -> Result<(), String> {
     let mut stmt = conn
         .prepare(
-            "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+            "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name, l.context
              FROM logs l LEFT JOIN devices d ON d.id = l.device_id
              ORDER BY l.id ASC",
         )
@@ -238,6 +492,7 @@ fn stream_rows(
             message: row.get(4).map_err(|e| e.to_string())?,
             device_id: row.get(5).map_err(|e| e.to_string())?,
             device: row.get(6).map_err(|e| e.to_string())?,
+            context: parse_context(row.get(7).map_err(|e| e.to_string())?),
         };
 
         if ndjson {

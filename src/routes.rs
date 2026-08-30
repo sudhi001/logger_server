@@ -23,7 +23,9 @@ use tower_http::trace::TraceLayer;
 
 use crate::assets;
 use crate::auth;
-use crate::handlers::{auth as auth_handlers, devices, health, ingest, query, stream};
+use crate::handlers::{
+    auth as auth_handlers, devices, health, ingest, mcp as handlers_mcp, query, stream,
+};
 use crate::middleware::ratelimit;
 use crate::state::AppState;
 
@@ -54,11 +56,19 @@ pub fn build(state: Arc<AppState>) -> Router {
     // ---- viewer zone: bounded reads ----
     let reads = Router::new()
         .route("/api/v1/logs/recent", get(query::recent))
+        .route("/api/v1/logs/search", get(query::search))
+        .route("/api/v1/logs/stats", get(query::stats))
+        .route("/api/v1/logs/{id}/context", get(query::context))
         .route("/api/v1/logs/by-name/{name}", get(query::by_name))
         .route("/api/v1/logs/export", get(query::export))
         .route("/api/v1/devices", get(devices::list).post(devices::create))
         .route("/api/v1/devices/{id}", delete(devices::revoke))
         .route("/metrics", get(health::metrics))
+        // Agents authenticate with the same admin credential as the dashboard.
+        .route(
+            "/mcp",
+            get(handlers_mcp::describe).post(handlers_mcp::handle),
+        )
         // Legacy aliases.
         .route("/logs/recent", get(query::recent))
         .route("/logs", get(query::export))

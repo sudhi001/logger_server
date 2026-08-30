@@ -26,13 +26,52 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_token_hash ON devices(token_hash);
 "#;
 
+/// Full-text search over log text.
+///
+/// An external-content table: FTS5 keeps only the index and reads the columns
+/// back from `logs`, so message text is not stored twice. Triggers keep it in
+/// step, which matters because retention deletes rows behind our back.
+const FTS_DDL: &str = r#"
+CREATE VIRTUAL TABLE IF NOT EXISTS logs_fts USING fts5(
+  message,
+  name,
+  content='logs',
+  content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER IF NOT EXISTS logs_fts_ai AFTER INSERT ON logs BEGIN
+  INSERT INTO logs_fts(rowid, message, name) VALUES (new.id, new.message, new.name);
+END;
+
+CREATE TRIGGER IF NOT EXISTS logs_fts_ad AFTER DELETE ON logs BEGIN
+  INSERT INTO logs_fts(logs_fts, rowid, message, name)
+  VALUES ('delete', old.id, old.message, old.name);
+END;
+
+CREATE TRIGGER IF NOT EXISTS logs_fts_au AFTER UPDATE ON logs BEGIN
+  INSERT INTO logs_fts(logs_fts, rowid, message, name)
+  VALUES ('delete', old.id, old.message, old.name);
+  INSERT INTO logs_fts(rowid, message, name) VALUES (new.id, new.message, new.name);
+END;
+"#;
+
 /// Columns added after the initial release. SQLite has no `ADD COLUMN IF NOT
 /// EXISTS`, so each is applied only when absent.
-const ADDED_COLUMNS: &[(&str, &str, &str)] = &[(
-    "logs",
-    "device_id",
-    "ALTER TABLE logs ADD COLUMN device_id INTEGER",
-)];
+const ADDED_COLUMNS: &[(&str, &str, &str)] = &[
+    (
+        "logs",
+        "device_id",
+        "ALTER TABLE logs ADD COLUMN device_id INTEGER",
+    ),
+    // Arbitrary caller-supplied JSON object: session id, app version, user id.
+    // Stored as text; SQLite has no JSON type.
+    (
+        "logs",
+        "context",
+        "ALTER TABLE logs ADD COLUMN context TEXT",
+    ),
+];
 
 fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -57,6 +96,31 @@ fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_logs_device_id ON logs(device_id, id DESC)",
     )?;
+    build_fts(conn)?;
+    Ok(())
+}
+
+/// Creates the search index, and backfills it if the database predates it.
+fn build_fts(conn: &Connection) -> Result<()> {
+    let existed: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='logs_fts'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    conn.execute_batch(FTS_DDL)?;
+
+    if !existed {
+        // The triggers only cover rows written from now on, so rebuild once
+        // over whatever is already stored.
+        let rows: i64 = conn.query_row("SELECT COUNT(*) FROM logs", [], |r| r.get(0))?;
+        if rows > 0 {
+            tracing::info!(rows, "backfilling the search index (one time)");
+            conn.execute_batch("INSERT INTO logs_fts(logs_fts) VALUES ('rebuild')")?;
+        }
+    }
     Ok(())
 }
 

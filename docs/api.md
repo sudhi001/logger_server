@@ -36,6 +36,7 @@ Also reachable as `POST /logs`.
 | `name` | no | Free-text tag, truncated to 255 characters |
 | `level` | no | `0` trace, `1` debug, `2` info (default), `3` warn, `4` error. Clamped to `0`–`4` |
 | `ts` | no | Unix **milliseconds**. Defaults to server receipt time |
+| `context` | no | A JSON **object** of structured fields (session id, app version, user id). Max 8 KB. Anything that is not an object is rejected with `400` |
 
 `device_id` and `device` are set by the server from your token; sending them has
 no effect.
@@ -109,6 +110,61 @@ Paging backwards through everything:
 curl "$URL/api/v1/logs/recent?limit=500" -H "x-admin-token: $ADMIN"
 curl "$URL/api/v1/logs/recent?limit=500&before_id=<last id from above>" -H "x-admin-token: $ADMIN"
 ```
+
+### `GET /api/v1/logs/search` — viewer
+
+Full-text search across everything stored.
+
+| Parameter | Notes |
+|---|---|
+| `q` | Free text. Words are ANDed; the last matches as a prefix. Omit to filter without text matching |
+| `min_level` | Minimum severity, `0`–`4` |
+| `device_id` | Restrict to one device |
+| `name` | Exact tag match |
+| `since` / `until` | Unix **milliseconds**, inclusive |
+| `before_id` | Pagination cursor |
+| `limit` | Default 1000, capped at 5000 |
+
+Your text is escaped, never interpreted as query syntax, so quotes and operators
+cannot produce a syntax error. Punctuation splits into tokens, so `txn_9f21ab`
+is found inside a longer message.
+
+```sh
+curl "$URL/api/v1/logs/search?q=NullPointerException&min_level=4" -H "x-admin-token: $ADMIN"
+```
+
+### `GET /api/v1/logs/{id}/context` — viewer
+
+The lines around one log, in the order they happened.
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `before` | 20 | Lines before, capped at 500 |
+| `after` | 20 | Lines after, capped at 500 |
+
+```json
+{ "before": [ … ], "match": { … }, "after": [ … ] }
+```
+
+`400` if there is no log with that id.
+
+### `GET /api/v1/logs/stats` — viewer
+
+Aggregates over a window. `since` and `until` are Unix milliseconds; both
+optional.
+
+```json
+{
+  "total": 15234,
+  "since": null, "until": null,
+  "first_ts": 1788070506225, "last_ts": 1788075947997,
+  "by_level":  [ { "level": 4, "label": "error", "count": 22 } ],
+  "by_device": [ { "name": "Pixel 8 Pro — Priya (QA)", "count": 9012 } ],
+  "by_name":   [ { "name": "[Net] ", "count": 4410 } ]
+}
+```
+
+`by_device` and `by_name` are the top 50 by count.
 
 ### `GET /api/v1/logs/by-name/{name}` — viewer
 
@@ -231,6 +287,11 @@ this to decide whether to render or bounce to the login page.
 `200 ok` normally, `503 draining` once shutdown has begun so a load balancer can
 route away before the process exits. Public, so a platform health check works
 without credentials.
+
+### `POST /mcp` — viewer
+
+Model Context Protocol endpoint, JSON-RPC 2.0, for AI agents. `GET /mcp`
+describes it. See [agents.md](agents.md).
 
 ### `GET /metrics` — viewer
 

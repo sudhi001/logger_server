@@ -1177,6 +1177,19 @@ done
 | `name` | no | Free-text tag, e.g. `"[Network] "`. Max 255 characters. |
 | `level` | no | `0`–`4`. Defaults to `2` (info); anything higher is clamped to `4`. |
 | `ts` | no | Unix **milliseconds**. Defaults to server receipt time. |
+| `context` | no | JSON **object** of structured fields. Max 8 KB. |
+
+Send `context` when you have anything worth correlating on later — a session
+id, the app version, the signed-in user:
+
+```json
+{ "name": "[Net] ", "message": "checkout failed",
+  "context": { "session": "s-42", "appVersion": "3.1.0", "userId": "u_88213" } }
+```
+
+It costs nothing to send and turns "an error happened" into "this error only
+happens on 3.1.0, for users in this session". It is also what makes
+[an AI agent](agents.md) able to answer questions about your logs.
 
 Send `ts` from the device if you care about the moment something happened rather
 than the moment it was uploaded — it matters once you are batching, and much

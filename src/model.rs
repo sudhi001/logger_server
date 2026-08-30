@@ -22,6 +22,10 @@ pub struct LogRecord {
     /// Resolved device name, attached on read for display. Never stored.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
+    /// Caller-supplied structured fields: session id, app version, user id, or
+    /// anything else worth correlating on later.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
 }
 
 /// Level scale. `info` is 2, matching the default the original service implied.
@@ -39,6 +43,9 @@ pub struct NewLog {
     pub message: String,
     pub ts: Option<i64>,
     pub level: Option<u8>,
+    /// Optional JSON object of structured fields. Anything that is not an
+    /// object is rejected, so the column stays queryable.
+    pub context: Option<serde_json::Value>,
 }
 
 /// Acknowledgement returned by the ingest endpoints.
@@ -83,6 +90,47 @@ pub struct BatchAck {
     pub dropped: usize,
     pub first_id: i64,
     pub last_id: i64,
+}
+
+/// Aggregate view over a time window, so a caller can summarise instead of
+/// reading thousands of lines.
+#[derive(Debug, Serialize)]
+pub struct LogStats {
+    pub total: i64,
+    pub since: Option<i64>,
+    pub until: Option<i64>,
+    pub first_ts: Option<i64>,
+    pub last_ts: Option<i64>,
+    pub by_level: Vec<LevelCount>,
+    pub by_device: Vec<NamedCount>,
+    pub by_name: Vec<NamedCount>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LevelCount {
+    pub level: u8,
+    pub label: &'static str,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NamedCount {
+    pub name: String,
+    pub count: i64,
+}
+
+/// A log line with the lines that surround it — the shape root-cause analysis
+/// actually needs.
+#[derive(Debug, Serialize)]
+pub struct LogContext {
+    pub before: Vec<LogRecord>,
+    #[serde(rename = "match")]
+    pub matched: LogRecord,
+    pub after: Vec<LogRecord>,
+}
+
+pub fn level_label(level: u8) -> &'static str {
+    LEVEL_NAMES.get(level as usize).copied().unwrap_or("info")
 }
 
 pub fn now_millis() -> i64 {

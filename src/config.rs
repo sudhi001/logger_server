@@ -22,6 +22,10 @@ pub struct Config {
     pub session_ttl: Duration,
     /// Send the session cookie with `Secure`. Must be off for plain-HTTP local use.
     pub cookie_secure: bool,
+    /// What an AI agent reaching the MCP endpoint may do.
+    pub mcp_access: crate::mcp::tools::Access,
+    /// Serve the MCP endpoint at all.
+    pub mcp_enabled: bool,
     /// Per-IP writes per second. `0` disables rate limiting.
     pub rate_limit_rps: u32,
     pub rate_limit_burst: u32,
@@ -87,6 +91,10 @@ impl Config {
                 "LOGGER_COOKIE_SECURE",
                 env_parse("LOGGER_TRUST_PROXY", false),
             ),
+            mcp_access: crate::mcp::tools::Access::from_env(
+                std::env::var("LOGGER_MCP_MODE").ok().as_deref(),
+            ),
+            mcp_enabled: env_parse("LOGGER_MCP_ENABLED", true),
             rate_limit_rps: env_parse("LOGGER_RATE_LIMIT_RPS", 500),
             rate_limit_burst: env_parse("LOGGER_RATE_LIMIT_BURST", 1_000),
             trust_proxy: env_parse("LOGGER_TRUST_PROXY", false),

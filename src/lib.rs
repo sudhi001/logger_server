@@ -6,6 +6,7 @@ pub mod config;
 pub mod error;
 pub mod handlers;
 pub mod hub;
+pub mod mcp;
 pub mod middleware;
 pub mod model;
 pub mod routes;

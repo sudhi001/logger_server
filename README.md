@@ -8,6 +8,7 @@
   <a href="https://logger-server-z5w8.onrender.com"><b>Live demo</b></a> ·
   <a href="docs/quickstart.md">Quick start</a> ·
   <a href="docs/clients.md">Connect your app</a> ·
+  <a href="docs/agents.md">Connect an AI agent</a> ·
   <a href="docs/api.md">API</a>
 </p>
 
@@ -74,6 +75,9 @@ errors:
 
 ![The same stream filtered to warnings and errors only: 29 lines, 10 shown](docs/images/dashboard-filtered.jpg)
 
+**Search everything you have ever logged.** Full-text search across all history
+— not just what is on screen — filtered by level, device, tag or time range.
+
 **Give every tester their own credential.** One per build, per phone, per person
 — so you can see whose logs you're reading, and cut one off without disturbing
 anyone else:
@@ -83,6 +87,46 @@ anyone else:
 Plus the things you'd expect from a log tail: pause to read something (or hit
 space), follow-the-tail that switches off when you scroll up, clear the view,
 and copy what's on screen as JSON.
+
+## Let an AI agent read your logs
+
+The server speaks the **Model Context Protocol**, so an assistant can
+investigate for you instead of you scrolling:
+
+> *"Why did checkout fail on Priya's phone this afternoon?"*
+> *"Is this crash hitting everyone, or one device?"*
+> *"What happened in the thirty seconds before that NullPointerException?"*
+
+Point Claude Code at it:
+
+```sh
+claude mcp add --transport http logger https://your-logger.example.com/mcp \
+  --header "Authorization: Bearer $LOGGER_ADMIN_TOKEN"
+```
+
+Or add it to any MCP client that speaks HTTP:
+
+```json
+{
+  "mcpServers": {
+    "logger": {
+      "type": "http",
+      "url": "https://your-logger.example.com/mcp",
+      "headers": { "Authorization": "Bearer lgra_your_admin_token" }
+    }
+  }
+}
+```
+
+The agent gets tools to search all history, pull the lines around any log,
+aggregate by level and device, and list devices — so it answers by looking
+things up rather than guessing from the last thousand lines.
+
+> **Agents read text your app was given, which means text an attacker may
+> influence.** By default the agent can also create and revoke device tokens.
+> Set `LOGGER_MCP_MODE=read` to make it query-only, which is the right choice
+> unless you specifically want an agent provisioning devices.
+> [Full guide, including the prompt-injection trade-off →](docs/agents.md)
 
 ## Quick start
 
@@ -150,7 +194,7 @@ That matters for one practical reason: **it runs on the free tier of anything.**
 | Memory, 400 people watching | — | **17.2 MB** |
 | Startup | 2–5 seconds | **~25 ms** |
 | Download size | 271 MB | **2.5 MB** |
-| Logs accepted per second | ~2–5 k | **~50 k** |
+| Logs accepted per second | ~2–5 k | **~38 k** (with search indexing) |
 
 Measured, not estimated — `VmRSS` read from `/proc` on the real image. If you
 want to know *how*, [docs/architecture.md](docs/architecture.md) explains the
@@ -164,6 +208,7 @@ three ideas that do most of the work.
 | [Connect your app](docs/clients.md) | Ready-to-paste loggers for ten languages |
 | [API reference](docs/api.md) | Every endpoint, parameter and status code |
 | [Configuration](docs/configuration.md) | Every setting, and when you'd change it |
+| [Connect an AI agent](docs/agents.md) | MCP setup, the tools, and the access model |
 | [Deployment](docs/deployment.md) | Docker, Compose, Render, nginx, production checklist |
 | [Architecture](docs/architecture.md) | How it works inside, and why it's built this way |
 | [Migrating to v3](docs/migration.md) | The breaking changes, and how to move |
@@ -171,11 +216,18 @@ three ideas that do most of the work.
 
 ## Running it yourself
 
-Rust 1.80 or newer. No JVM, no Gradle.
+**macOS, without Docker:**
+
+```sh
+brew install sudhi001/tap/logger-server
+logger-server
+```
+
+**From source** — Rust 1.80 or newer. No JVM, no Gradle:
 
 ```sh
 cargo run --release      # starts on :8080
-cargo test               # 30 tests
+cargo test               # 43 tests
 ```
 
 Or take the image from [Docker Hub](https://hub.docker.com/r/sudhis/logger_server).

@@ -28,6 +28,9 @@ const el = {
 
 const state = {
   logs: [],
+  /** Server-side search results, shown instead of the live buffer when set. */
+  searchHits: null,
+  searching: false,
   paused: false,
   follow: true,
   search: '',
@@ -56,8 +59,19 @@ function prettify(message) {
   return message;
 }
 
-function isExpandable(message) {
-  return message.length > COLLAPSE_OVER || message.includes('\n') || prettify(message) !== message;
+function isExpandable(log) {
+  const m = log.message;
+  return Boolean(log.context) || m.length > COLLAPSE_OVER || m.includes('\n')
+    || prettify(m) !== m;
+}
+
+/** The expanded body: the message, plus any structured context beneath it. */
+function expandedText(log) {
+  const parts = [prettify(log.message)];
+  if (log.context) {
+    parts.push('', '── context ──', JSON.stringify(log.context, null, 2));
+  }
+  return parts.join('\n');
 }
 
 function matches(log) {
@@ -106,7 +120,7 @@ function buildRow(log) {
   const msg = document.createElement('span');
   msg.className = 'msg';
 
-  if (isExpandable(log.message)) {
+  if (isExpandable(log)) {
     row.classList.add('expandable');
     msg.classList.add('collapsed');
     const caret = document.createElement('span');
@@ -121,7 +135,7 @@ function buildRow(log) {
       if (window.getSelection().toString()) return;
       const open = msg.classList.toggle('collapsed');
       caret.textContent = open ? '▸' : '▾';
-      body.textContent = open ? log.message : prettify(log.message);
+      body.textContent = open ? log.message : expandedText(log);
       e.stopPropagation();
     });
   } else {
@@ -134,15 +148,22 @@ function buildRow(log) {
 
 /** Full rebuild. Used on filter changes; new lines append incrementally. */
 function render() {
-  const visible = state.logs.filter(matches);
+  // A search queries the whole history on the server; without one we filter
+  // the live buffer locally, which keeps typing instant.
+  const source = state.searchHits ?? state.logs;
+  const visible = state.searchHits ? source : source.filter(matches);
   el.logs.replaceChildren();
 
   if (visible.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = state.logs.length
-      ? 'No lines match the current filters.'
-      : 'Waiting for logs…';
+    empty.textContent = state.searching
+      ? 'Searching…'
+      : state.searchHits
+        ? 'Nothing in the whole history matches that search.'
+        : state.logs.length
+          ? 'No lines match the current filters.'
+          : 'Waiting for logs…';
     el.logs.appendChild(empty);
   } else {
     const frag = document.createDocumentFragment();
@@ -155,6 +176,11 @@ function render() {
 }
 
 function updateStatus(visibleCount) {
+  if (state.searchHits) {
+    el.count.textContent = `${state.searchHits.length.toLocaleString()} found`;
+    el.shown.textContent = 'searching all history';
+    return;
+  }
   el.count.textContent = `${state.logs.length.toLocaleString()} line${state.logs.length === 1 ? '' : 's'}`;
   const filtered = visibleCount !== undefined ? visibleCount : state.logs.filter(matches).length;
   el.shown.textContent =
@@ -169,7 +195,7 @@ function appendLog(log) {
     state.logs.splice(0, state.logs.length - MAX_BUFFER);
     if (!state.paused) { render(); return; }
   }
-  if (state.paused) { updateStatus(); return; }
+  if (state.paused || state.searchHits) { updateStatus(); return; }
 
   if (!matches(log)) { updateStatus(); return; }
 
@@ -243,22 +269,58 @@ async function loadDevices() {
 /* ---------------- controls ---------------- */
 
 let searchTimer;
+let searchSeq = 0;
+
+/** Searches the full history server-side, rather than the loaded buffer. */
+async function runSearch(term) {
+  const seq = ++searchSeq;
+  if (!term) {
+    state.searchHits = null;
+    state.searching = false;
+    render();
+    return;
+  }
+
+  state.searching = true;
+  render();
+
+  const params = new URLSearchParams({ q: term, limit: '500' });
+  if (state.minLevel) params.set('min_level', String(state.minLevel));
+  if (state.deviceId) params.set('device_id', state.deviceId);
+
+  try {
+    const res = await fetch(`/api/v1/logs/search?${params}`);
+    if (res.status === 401) { toLogin(); return; }
+    // A slower earlier request must not overwrite a newer one's results.
+    if (seq !== searchSeq) return;
+    state.searchHits = res.ok ? (await res.json()).reverse() : [];
+  } catch {
+    if (seq !== searchSeq) return;
+    state.searchHits = [];
+  } finally {
+    if (seq === searchSeq) {
+      state.searching = false;
+      render();
+    }
+  }
+}
+
 el.search.addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
-    state.search = el.search.value.trim().toLowerCase();
-    render();
-  }, 120);
+    state.search = el.search.value.trim();
+    runSearch(state.search);
+  }, 250);
 });
 
 el.level.addEventListener('change', () => {
   state.minLevel = Number(el.level.value);
-  render();
+  if (state.search) runSearch(state.search); else render();
 });
 
 el.device.addEventListener('change', () => {
   state.deviceId = el.device.value;
-  render();
+  if (state.search) runSearch(state.search); else render();
 });
 
 function togglePause() {
@@ -279,11 +341,14 @@ el.follow.addEventListener('click', () => {
 
 el.clear.addEventListener('click', () => {
   state.logs = [];
+  state.searchHits = null;
+  el.search.value = '';
+  state.search = '';
   render();
 });
 
 el.copy.addEventListener('click', async () => {
-  const text = JSON.stringify(state.logs.filter(matches), null, 2);
+  const text = JSON.stringify(state.searchHits ?? state.logs.filter(matches), null, 2);
   try {
     await navigator.clipboard.writeText(text);
     const old = el.copy.textContent;

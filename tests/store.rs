@@ -32,11 +32,28 @@ fn record(store: &Store, name: &str, message: &str) -> LogRecord {
         message: message.to_string(),
         device_id: None,
         device: None,
+        context: None,
     }
 }
 
 async fn settle() {
     tokio::time::sleep(Duration::from_millis(400)).await;
+}
+
+/// Waits until the writer has committed `expected` rows.
+///
+/// A fixed sleep makes these tests a throughput benchmark in disguise: they
+/// start failing the moment a write costs slightly more, even though nothing
+/// was lost. Polling asserts what we actually care about — everything queued
+/// eventually lands.
+async fn settle_until(store: &Store, expected: i64) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        if store.reader.count().await.unwrap_or(0) >= expected {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }
 
 #[tokio::test]
@@ -49,7 +66,7 @@ async fn writer_batches_a_burst_into_storage() {
             .enqueue(record(&store, "burst", &format!("m{i}")))
             .unwrap();
     }
-    settle().await;
+    settle_until(&store, 5000).await;
 
     assert_eq!(store.reader.count().await.unwrap(), 5000);
     writer.shutdown();
@@ -152,7 +169,7 @@ async fn export_streams_every_row_in_order() {
             .enqueue(record(&store, "n", &format!("m{i}")))
             .unwrap();
     }
-    settle().await;
+    settle_until(&store, N as i64).await;
 
     // Drain the export stream chunk by chunk, exactly as the HTTP body does.
     let mut rx = store.reader.export(true).await.unwrap();
