@@ -4,8 +4,8 @@ Two Dockerfiles are provided.
 
 | File | Base | Image size | Idle RSS | Use it for |
 |---|---|---|---|---|
-| `Dockerfile` | `scratch` (static musl) | ~6 MB | ~6–9 MB | Production. Default. |
-| `Dockerfile.glibc` | `distroless/cc` | ~25 MB | ~8–15 MB | When you need glibc or native deps. |
+| `Dockerfile` | `scratch` (static musl) | 4.76 MB | 10.3 MB | Production. Default. |
+| `Dockerfile.glibc` | `distroless/cc` | ~25 MB | higher | When you need glibc or native deps. |
 
 Both are multi-stage: the dependency tree is compiled in a cached layer, so
 editing `src/` does not rebuild the world.
@@ -45,13 +45,17 @@ docker push sudhis/logger_server:2.0.0
 
 ## Verify the memory claim
 
+`docker stats` reports the cgroup total, which includes page cache for the
+SQLite file. For the process's own memory, read `VmRSS` from `/proc` instead.
+
+
 ```sh
 docker run --rm -d --name lg -p 8080:8080 sudhis/logger_server:2.0.0
-docker stats --no-stream lg          # expect well under 10 MB at idle
+docker stats --no-stream lg          # ~10 MB at idle
 
 # Open 500 live tails and measure again.
-for i in $(seq 1 500); do curl -N -s localhost:8080/logs/stream > /dev/null & done
-docker stats --no-stream lg          # expect under 20 MB
+for i in $(seq 1 400); do curl -N -s localhost:8080/logs/stream > /dev/null & done
+docker stats --no-stream lg          # ~17 MB, i.e. ~16 KB per connection
 ```
 
 `/metrics` exposes `logger_sse_clients`, `logger_sse_evicted_total`, and

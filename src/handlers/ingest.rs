@@ -107,22 +107,35 @@ pub async fn ingest_batch(
         return Err(AppError::BadRequest("empty batch".into()));
     }
 
+    let total = inputs.len();
     let mut first_id = 0i64;
     let mut last_id = 0i64;
     let mut accepted = 0usize;
+    let mut dropped = 0usize;
 
-    for input in inputs {
+    for (idx, input) in inputs.into_iter().enumerate() {
         let id = state.store.next_id();
         let rec = to_record(&state, id, input)?;
-        last_id = rec.id;
-        if accepted == 0 {
-            first_id = rec.id;
-        }
+        let rec_id = rec.id;
+
         // A full queue mid-batch reports what was accepted rather than
         // discarding the whole batch.
         if dispatch(&state, rec).is_err() {
+            // Everything from here on is dropped, not just the record that
+            // happened to hit the boundary. `dispatch` already counted that
+            // one, so only the remainder is added here.
+            dropped = total - idx;
+            state
+                .metrics
+                .shed
+                .fetch_add(dropped as u64 - 1, Ordering::Relaxed);
             break;
         }
+
+        if accepted == 0 {
+            first_id = rec_id;
+        }
+        last_id = rec_id;
         accepted += 1;
     }
 
@@ -134,6 +147,7 @@ pub async fn ingest_batch(
         StatusCode::ACCEPTED,
         Json(BatchAck {
             accepted,
+            dropped,
             first_id,
             last_id,
         }),

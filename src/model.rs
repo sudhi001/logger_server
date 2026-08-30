@@ -41,6 +41,9 @@ pub struct IngestAck {
 #[derive(Debug, Serialize)]
 pub struct BatchAck {
     pub accepted: usize,
+    /// Records the server refused because its write queue was full. The client
+    /// should resend these; the last `dropped` entries of the batch were lost.
+    pub dropped: usize,
     pub first_id: i64,
     pub last_id: i64,
 }

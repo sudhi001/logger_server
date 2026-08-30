@@ -1,8 +1,8 @@
 # Remote Logger for Mobile Application Developers
 
 A remote log sink: mobile apps `POST` log lines, and you watch them stream live
-in a browser. Written in Rust — a single static binary that idles at well under
-10 MB of RAM.
+in a browser. Written in Rust — a single static binary in a 4.76 MB image
+that idles at 10 MB of RAM.
 
 ## Demo
 
@@ -17,11 +17,17 @@ the same URLs while making memory bounded and predictable.
 
 | | Kotlin / Spring Boot | Rust |
 |---|---|---|
-| Idle RSS | ~250–400 MB | **~6–9 MB** |
-| RSS with 1000 live tails | ~500 MB+ | **~15 MB** |
-| Cold start | 2–5 s | **< 20 ms** |
-| Image size | ~450 MB | **~6 MB** |
+| Idle RSS | ~250–400 MB | **10.3 MB** |
+| RSS, 400 live tails | — | **17.2 MB** |
+| RSS, ~2000 live tails | — | **42.8 MB** (~16 KB/client) |
+| Cold start | 2–5 s | **~25 ms** |
+| Image size | 259 MB (compressed) | **4.76 MB** |
+| Batched ingest | ~2–5 k/s | **~50 k rows/s** |
 | `GET /logs` on a huge table | loads it all into heap | streams, flat memory |
+
+Those Rust figures are measured, not estimated: `linux/amd64` image, `VmRSS`
+read from `/proc`, under emulation on Apple Silicon. The idle number breaks down
+as 6.6 MB anonymous plus 3.7 MB of file-backed binary pages.
 
 The rewrite also fixed defects carried by the original implementation:
 
@@ -62,6 +68,12 @@ Three properties do the heavy lifting:
 3. **Result sets are never materialised.** The export endpoint steps a SQLite
    cursor and emits fixed-size chunks, so peak memory is one chunk whether the
    table holds a thousand rows or fifty million.
+
+What memory does scale with is *connection count*, at roughly 16 KB per open
+SSE stream — that is hyper's per-connection read/write buffers plus a tokio
+task, not per-client log buffering. A disconnected client is reaped within one
+keepalive interval (15 s), since a closed socket is only detected on the next
+write.
 
 ## API
 

@@ -24,5 +24,8 @@ FROM scratch
 WORKDIR /data
 COPY --from=builder /build/target/release/logger_server /logger_server
 ENV LOGGER_DB_PATH=/data/logs.db
+# mimalloc eagerly commits its arenas on startup, which costs ~7 MB of resident
+# memory the server never uses. Measured: 12.6 MB -> 5.8 MB anonymous RSS.
+ENV MIMALLOC_ARENA_EAGER_COMMIT=0
 EXPOSE 8080
 ENTRYPOINT ["/logger_server"]

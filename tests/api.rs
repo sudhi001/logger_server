@@ -345,3 +345,48 @@ async fn static_assets_are_served_from_the_binary() {
     assert_eq!(resp.status(), StatusCode::OK);
     writer.shutdown();
 }
+
+#[tokio::test]
+async fn a_batch_that_overflows_the_queue_reports_every_dropped_row() {
+    // Regression: the handler used to break out of the loop on the first
+    // rejected record and count only that one, so `logger_shed_total` silently
+    // under-reported by the whole remainder of the batch.
+    let (app, writer) = app(|c| c.ingest_queue = 64);
+
+    let rows: Vec<_> = (0..4000)
+        .map(|i| serde_json::json!({ "name": "n", "message": format!("m{i}") }))
+        .collect();
+    let payload = serde_json::Value::Array(rows).to_string();
+
+    let resp = app
+        .clone()
+        .oneshot(post("/api/v1/logs/batch", &payload))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let ack: serde_json::Value = serde_json::from_str(&body_string(resp).await).unwrap();
+    let accepted = ack["accepted"].as_u64().unwrap();
+    let dropped = ack["dropped"].as_u64().unwrap();
+
+    assert!(dropped > 0, "a 64-slot queue cannot absorb 4000 rows");
+    assert_eq!(
+        accepted + dropped,
+        4000,
+        "every row is either accepted or accounted for as dropped"
+    );
+
+    // The metric must agree with what the client was told.
+    let metrics = body_string(app.oneshot(get("/metrics")).await.unwrap()).await;
+    let shed: u64 = metrics
+        .lines()
+        .find(|l| l.starts_with("logger_shed_total "))
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|v| v.parse().ok())
+        .unwrap();
+    assert_eq!(
+        shed, dropped,
+        "logger_shed_total must match the reported drop count"
+    );
+    writer.shutdown();
+}
