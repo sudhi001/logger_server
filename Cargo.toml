@@ -1,0 +1,47 @@
+[package]
+name = "logger_server"
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Remote log sink for mobile application developers"
+license = "MIT"
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "tower-log"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "signal", "macros"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+tower = { version = "0.5", default-features = false }
+tower-http = { version = "0.7", features = ["trace", "cors", "limit", "catch-panic", "compression-gzip", "timeout"] }
+http-body-util = "0.1"
+bytes = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+governor = { version = "0.10", default-features = false, features = ["std", "jitter", "quanta"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc = { version = "0.1", default-features = false, optional = true }
+
+[features]
+default = []
+# Enabled for musl builds: musl's allocator degrades badly under multi-thread
+# contention. Irrelevant (and unused) on glibc, where the system allocator wins.
+mimalloc = ["dep:mimalloc"]
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+# io-util is needed only by the tests, which speak HTTP over a raw socket.
+tokio = { version = "1", features = ["io-util"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+# Deliberately NOT "abort": a panicking handler must not take down a log sink.
+# Paired with tower_http::catch_panic::CatchPanicLayer.
+panic = "unwind"

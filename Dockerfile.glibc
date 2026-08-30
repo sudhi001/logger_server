@@ -1,0 +1,27 @@
+# Debuggable variant: glibc on distroless. ~25 MB, slightly higher RSS than the
+# musl build, but easier to attach tooling to and to extend with native deps.
+FROM --platform=linux/amd64 rust:1.98-slim AS builder
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libc6-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo 'fn main() {}' > src/main.rs && \
+    cargo build --release && rm -rf src
+
+COPY src ./src
+COPY static ./static
+RUN touch src/main.rs && cargo build --release
+
+FROM gcr.io/distroless/cc-debian12
+WORKDIR /data
+COPY --from=builder /build/target/release/logger_server /logger_server
+ENV LOGGER_DB_PATH=/data/logs.db
+# Caps glibc's per-thread arenas, which would otherwise inflate RSS well past
+# what the process actually uses.
+ENV MALLOC_ARENA_MAX=2
+EXPOSE 8080
+ENTRYPOINT ["/logger_server"]

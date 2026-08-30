@@ -1,186 +1,59 @@
-Let's go through the entire process again with the specific username `sudhis`.
+# Building and publishing the image
 
-### Step-by-Step Instructions
+Two Dockerfiles are provided.
 
-1. **Modify Dockerfile to Specify Platform**
-2. **Log In to Docker Hub**
-3. **Build the Docker Image with Platform Specification**
-4. **Tag the Docker Image**
-5. **Push the Docker Image**
-6. **Pull the Docker Image to Verify**
+| File | Base | Image size | Idle RSS | Use it for |
+|---|---|---|---|---|
+| `Dockerfile` | `scratch` (static musl) | ~6 MB | ~6–9 MB | Production. Default. |
+| `Dockerfile.glibc` | `distroless/cc` | ~25 MB | ~8–15 MB | When you need glibc or native deps. |
 
-### Step 1: Modify Dockerfile to Specify Platform
+Both are multi-stage: the dependency tree is compiled in a cached layer, so
+editing `src/` does not rebuild the world.
 
-Update your `Dockerfile` to ensure it's built for the `linux/amd64` platform.
+## Build
 
-#### Dockerfile
-
-```Dockerfile
-# Use a base image with Java runtime, specifying the platform
-FROM --platform=linux/amd64 openjdk:17-jdk-slim
-
-# Set the working directory
-WORKDIR /app
-
-# Add the jar file
-ARG JAR_FILE=build/libs/*.jar
-COPY ${JAR_FILE} app.jar
-
-# Expose the port on which the app will run
-EXPOSE 8080
-
-# Run the jar file
-ENTRYPOINT ["java", "-jar", "app.jar"]
+```sh
+docker build --platform linux/amd64 -t sudhis/logger_server:2.0.0 .
 ```
 
-### Step 2: Log In to Docker Hub
+The glibc variant:
 
-Log in to Docker Hub using the Docker CLI.
+```sh
+docker build --platform linux/amd64 -f Dockerfile.glibc -t sudhis/logger_server:2.0.0-glibc .
+```
+
+`--platform linux/amd64` matters when building on Apple Silicon: the deploy
+target is amd64, and the release profile uses fat LTO, so expect the emulated
+build to take a while. It is cached after the first run.
+
+## Run
+
+```sh
+docker run --rm -p 8080:8080 -v logger-data:/data sudhis/logger_server:2.0.0
+```
+
+The volume at `/data` is what makes logs survive a restart. Without it the
+SQLite file lives in the container's writable layer and disappears with the
+container.
+
+## Push
 
 ```sh
 docker login
+docker push sudhis/logger_server:2.0.0
 ```
 
-You will be prompted to enter your Docker Hub username and password.
-
-### Step 3: Build the Docker Image with Platform Specification
-
-Build the Docker image using the `--platform` flag to ensure it's built for `linux/amd64`.
+## Verify the memory claim
 
 ```sh
-docker build --platform linux/amd64 -t sudhis/logger_server:1.0.1-SNAPSHOT .
+docker run --rm -d --name lg -p 8080:8080 sudhis/logger_server:2.0.0
+docker stats --no-stream lg          # expect well under 10 MB at idle
+
+# Open 500 live tails and measure again.
+for i in $(seq 1 500); do curl -N -s localhost:8080/logs/stream > /dev/null & done
+docker stats --no-stream lg          # expect under 20 MB
 ```
 
-### Step 4: Tag the Docker Image
-
-Tag your Docker image with your Docker Hub username and the desired repository name.
-
-```sh
-docker tag sudhis/logger_server:1.0.1-SNAPSHOT sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-### Step 5: Push the Docker Image
-
-Push the Docker image to Docker Hub.
-
-```sh
-docker push sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-### Step 6: Pull the Docker Image to Verify
-
-Once the image is successfully pushed, you can pull it from Docker Hub using the same tag.
-
-```sh
-docker pull sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-### Example Commands
-
-Assuming the following details:
-- Docker image name: `sudhis/logger_server:1.0.1-SNAPSHOT`
-- Docker Hub username: `sudhis`
-
-#### Log In to Docker Hub
-
-```sh
-docker login
-```
-
-#### Modify Dockerfile (if not already done)
-
-```Dockerfile
-# Use a base image with Java runtime, specifying the platform
-FROM --platform=linux/amd64 openjdk:17-jdk-slim
-
-# Set the working directory
-WORKDIR /app
-
-# Add the jar file
-ARG JAR_FILE=build/libs/*.jar
-COPY ${JAR_FILE} app.jar
-
-# Expose the port on which the app will run
-EXPOSE 8080
-
-# Run the jar file
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
-
-#### Build the Docker Image
-
-```sh
-docker build --platform linux/amd64 -t sudhis/logger_server:1.0.1-SNAPSHOT .
-```
-
-#### Tag the Docker Image
-
-```sh
-docker tag sudhis/logger_server:1.0.1-SNAPSHOT sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-#### Push the Docker Image
-
-```sh
-docker push sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-#### Pull the Docker Image to Verify
-
-```sh
-docker pull sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-### Full Process
-
-1. **Log in to Docker Hub**:
-
-```sh
-docker login
-```
-
-2. **Modify Dockerfile** (if not already done):
-
-```Dockerfile
-# Use a base image with Java runtime, specifying the platform
-FROM --platform=linux/amd64 openjdk:17-jdk-slim
-
-# Set the working directory
-WORKDIR /app
-
-# Add the jar file
-ARG JAR_FILE=build/libs/*.jar
-COPY ${JAR_FILE} app.jar
-
-# Expose the port on which the app will run
-EXPOSE 8080
-
-# Run the jar file
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
-
-3. **Build the Docker Image**:
-
-```sh
-docker build --platform linux/amd64 -t sudhis/logger_server:1.0.1-SNAPSHOT .
-```
-
-4. **Tag the Docker Image**:
-
-```sh
-docker tag sudhis/logger_server:1.0.1-SNAPSHOT sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-5. **Push the Docker Image**:
-
-```sh
-docker push sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-6. **Pull the Docker Image to Verify**:
-
-```sh
-docker pull sudhis/logger_server:1.0.1-SNAPSHOT
-```
-
-By following these steps, you ensure that your Docker image is built for the `linux/amd64` platform, tagged correctly, and pushed to Docker Hub with the `1.0.1-SNAPSHOT` tag.
+`/metrics` exposes `logger_sse_clients`, `logger_sse_evicted_total`, and
+`logger_shed_total`, which is the quickest way to confirm the server is holding
+its bounds rather than quietly buffering.
