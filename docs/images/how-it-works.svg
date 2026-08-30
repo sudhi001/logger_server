@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 330" width="880" role="img" aria-label="Three steps: your app posts a log with its device token; the server stores it and fans it out; your browser shows it live.">
+  <defs>
+    <style>
+      .bg    { fill: #0b0e14; }
+      .panel { fill: #11151f; stroke: #222836; stroke-width: 1; }
+      .t     { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #c9d1d9; }
+      .dim   { fill: #6e7891; }
+      .accent{ fill: #4c9aff; }
+      .ok    { fill: #3fb950; }
+      .warn  { fill: #e3b341; }
+      .num   { font-size: 15px; font-weight: 700; }
+      .hd    { font-size: 13px; font-weight: 700; }
+      .body  { font-size: 11.5px; }
+      .arrow { stroke: #4c9aff; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4c9aff"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="880" height="330" rx="10"/>
+
+  <!-- 1 -->
+  <rect class="panel" x="28" y="52" width="248" height="200" rx="8"/>
+  <circle cx="52" cy="76" r="13" fill="#4c9aff"/>
+  <text class="t num" x="52" y="81" text-anchor="middle" fill="#06101f">1</text>
+  <text class="t hd" x="76" y="81">Your app sends</text>
+
+  <text class="t dim body" x="48" y="112">Each build carries its own</text>
+  <text class="t dim body" x="48" y="130">device token.</text>
+
+  <rect x="48" y="146" width="208" height="86" rx="6" fill="#0b0e14" stroke="#222836"/>
+  <text class="t accent body" x="60" y="167">POST /api/v1/logs</text>
+  <text class="t dim body" x="60" y="185">Authorization: Bearer</text>
+  <text class="t ok body" x="60" y="201">  lgrd_nZQa6MF…</text>
+  <text class="t dim body" x="60" y="221">{"message":"crashed"}</text>
+
+  <path class="arrow" marker-end="url(#b)" d="M284 152 L 308 152"/>
+
+  <!-- 2 -->
+  <rect class="panel" x="316" y="52" width="248" height="200" rx="8"/>
+  <circle cx="340" cy="76" r="13" fill="#4c9aff"/>
+  <text class="t num" x="340" y="81" text-anchor="middle" fill="#06101f">2</text>
+  <text class="t hd" x="364" y="81">The server does two</text>
+  <text class="t hd" x="364" y="97">things at once</text>
+
+  <rect x="336" y="120" width="208" height="52" rx="6" fill="#0b0e14" stroke="#222836"/>
+  <text class="t ok body" x="348" y="140">→ writes it to SQLite</text>
+  <text class="t dim body" x="348" y="158">batched, so it is fast</text>
+
+  <rect x="336" y="182" width="208" height="52" rx="6" fill="#0b0e14" stroke="#222836"/>
+  <text class="t warn body" x="348" y="202">→ pushes it to anyone</text>
+  <text class="t dim body" x="348" y="220">watching, right now</text>
+
+  <path class="arrow" marker-end="url(#b)" d="M572 152 L 596 152"/>
+
+  <!-- 3 -->
+  <rect class="panel" x="604" y="52" width="248" height="200" rx="8"/>
+  <circle cx="628" cy="76" r="13" fill="#4c9aff"/>
+  <text class="t num" x="628" y="81" text-anchor="middle" fill="#06101f">3</text>
+  <text class="t hd" x="652" y="81">You watch it live</text>
+
+  <text class="t dim body" x="624" y="112">No refresh, no polling.</text>
+
+  <rect x="624" y="128" width="208" height="104" rx="6" fill="#0b0e14" stroke="#222836"/>
+  <text class="t dim body" x="634" y="149">12:46:32  <tspan class="warn">WARN</tspan>  429 backoff</text>
+  <text class="t dim body" x="634" y="169">12:46:40  <tspan class="warn">WARN</tspan>  underrun</text>
+  <text class="t dim body" x="634" y="189">12:46:45  <tspan fill="#f85149">ERROR</tspan> NullPointer…</text>
+  <text class="t dim body" x="634" y="209">12:46:46  <tspan fill="#f85149">ERROR</tspan> terminating</text>
+  <text class="t ok body" x="634" y="226">● live</text>
+
+  <text class="t dim body" x="440" y="292" text-anchor="middle">Every log line is tagged with the device that sent it, so three testers</text>
+  <text class="t dim body" x="440" y="310" text-anchor="middle">on three phones stay readable in one stream.</text>
+</svg>

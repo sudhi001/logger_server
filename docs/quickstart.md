@@ -32,12 +32,16 @@ curl localhost:8080/healthz     # -> ok
 Open <http://localhost:8080>. You will be sent to a login page — nothing is
 readable without signing in. Enter the admin token.
 
+![The login screen](images/login.jpg)
+
 ## 3. Register a device
 
 "Device" means one app build, one phone, or one tester — whatever you want to be
 able to identify and revoke separately.
 
 Go to **Devices** → enter a name like `Pixel 8 — QA` → **Create device**.
+
+![Creating a device: the token is shown once, with a ready-to-paste curl example](images/devices.jpg)
 
 You will get a token like `lgrd_nZQa6MFVrSzkWrAGQRmSqWnScurnWvgi`. **Copy it
 now.** Only its hash is stored, so it cannot be shown to you again. If you lose
@@ -63,6 +67,8 @@ curl -X POST http://localhost:8080/api/v1/logs \
 
 It appears in the browser immediately, tagged with the device that sent it.
 
+![Logs arriving from three devices at once](images/dashboard.jpg)
+
 Only `message` is really required. `name` is a free-text tag — most people use
 it for a subsystem, like `[Network]` — and `level` runs 0–4:
 
@@ -87,6 +93,14 @@ request per line, which matters on mobile.
 | **Clear** | Empties the view without deleting anything on the server |
 | **Copy** | Puts the currently visible lines on your clipboard as JSON |
 | **Click a line** | Expands it — pretty-prints JSON, and preserves stack-trace newlines |
+
+Expanding a crash and a JSON payload:
+
+![A stack trace and a JSON payload, both expanded](images/dashboard-expanded.jpg)
+
+Narrowing three noisy devices down to just what went wrong:
+
+![The stream filtered to warnings and errors](images/dashboard-filtered.jpg)
 
 The view holds the most recent 5,000 lines. Older history is still on the server
 and reachable through [the API](api.md).

@@ -28,6 +28,15 @@ All of them follow the same three rules:
 
 ---
 
+## Where the token comes from
+
+Create one per app build on the **Devices** page. It is shown once, with a
+ready-to-paste example:
+
+![The devices page with a freshly created token](images/devices.jpg)
+
+---
+
 ## A word on putting tokens in your app
 
 A device token embedded in a shipped app binary **can be extracted**. Anyone

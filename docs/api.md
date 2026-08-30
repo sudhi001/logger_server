@@ -4,6 +4,8 @@ Base URL is wherever you deployed it. All request and response bodies are JSON.
 
 ## Authentication
 
+![Device tokens write only; the admin token or a session reads and manages](images/auth.svg)
+
 Two credentials, with different powers:
 
 | Credential | Header | Can do |

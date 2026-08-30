@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 366" width="880" role="img" aria-label="Without a remote logger, a log line printed on a tester's phone dies on that phone. With logger_server, it reaches your browser in real time.">
+  <defs>
+    <style>
+      .bg    { fill: #0b0e14; }
+      .panel { fill: #11151f; stroke: #222836; stroke-width: 1; }
+      .t     { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #c9d1d9; }
+      .dim   { fill: #6e7891; }
+      .accent{ fill: #4c9aff; }
+      .err   { fill: #f85149; }
+      .ok    { fill: #3fb950; }
+      .lbl   { font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+      .body  { font-size: 12px; }
+      .small { font-size: 11px; }
+      .arrow { stroke: #4c9aff; stroke-width: 2; fill: none; }
+      .dead  { stroke: #f85149; stroke-width: 2; fill: none; stroke-dasharray: 5 4; }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4c9aff"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="880" height="366" rx="10"/>
+
+  <!-- ── Without ───────────────────────────────────────────── -->
+  <text class="t err lbl" x="32" y="38">WITHOUT A REMOTE LOGGER</text>
+
+  <rect class="panel" x="32" y="56" width="150" height="96" rx="8"/>
+  <text class="t body" x="107" y="84" text-anchor="middle">Tester's phone</text>
+  <text class="t dim small" x="107" y="104" text-anchor="middle">200 km away</text>
+  <text class="t err small" x="107" y="128" text-anchor="middle">NullPointerException</text>
+
+  <path class="dead" d="M190 104 L 300 104"/>
+  <text class="t err small" x="245" y="94" text-anchor="middle">✕</text>
+  <text class="t dim small" x="245" y="128" text-anchor="middle">no cable</text>
+  <text class="t dim small" x="245" y="142" text-anchor="middle">no logcat</text>
+
+  <rect class="panel" x="308" y="56" width="150" height="96" rx="8"/>
+  <text class="t body" x="383" y="84" text-anchor="middle">You</text>
+  <text class="t dim small" x="383" y="104" text-anchor="middle">at your desk</text>
+  <text class="t err body" x="383" y="130" text-anchor="middle">"it crashed"</text>
+
+  <text class="t dim small" x="490" y="86">The log line was printed.</text>
+  <text class="t dim small" x="490" y="106">It existed for a moment on a</text>
+  <text class="t dim small" x="490" y="122">device you cannot reach,</text>
+  <text class="t dim small" x="490" y="138">and then it was gone.</text>
+
+  <line x1="32" y1="188" x2="848" y2="188" stroke="#222836" stroke-width="1"/>
+
+  <!-- ── With ──────────────────────────────────────────────── -->
+  <text class="t ok lbl" x="32" y="228">WITH logger_server</text>
+
+  <rect class="panel" x="32" y="246" width="150" height="96" rx="8"/>
+  <text class="t body" x="107" y="274" text-anchor="middle">Tester's phone</text>
+  <text class="t dim small" x="107" y="294" text-anchor="middle">same crash</text>
+  <text class="t accent small" x="107" y="318" text-anchor="middle">POST /api/v1/logs</text>
+
+  <path class="arrow" marker-end="url(#a)" d="M190 294 L 296 294"/>
+  <text class="t dim small" x="243" y="282" text-anchor="middle">HTTPS</text>
+
+  <rect class="panel" x="308" y="246" width="150" height="96" rx="8"/>
+  <text class="t body" x="383" y="274" text-anchor="middle">Your server</text>
+  <text class="t dim small" x="383" y="294" text-anchor="middle">stores + fans out</text>
+  <text class="t ok small" x="383" y="318" text-anchor="middle">11 MB RAM</text>
+
+  <path class="arrow" marker-end="url(#a)" d="M466 294 L 572 294"/>
+  <text class="t dim small" x="519" y="284" text-anchor="middle">live stream</text>
+
+  <rect class="panel" x="584" y="246" width="264" height="96" rx="8"/>
+  <text class="t body" x="716" y="274" text-anchor="middle">Your browser</text>
+  <text class="t err small" x="600" y="298">ERROR [Crash] NullPointerException</text>
+  <text class="t dim small" x="600" y="316">  at SessionManager.refresh:88</text>
+</svg>

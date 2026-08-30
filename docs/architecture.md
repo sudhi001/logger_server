@@ -5,6 +5,10 @@ deciding whether to trust it with something.
 
 ## Shape
 
+![The write path forks into a bounded queue and a fixed broadcast ring; the read path uses a separate pool and a streaming cursor](images/architecture.svg)
+
+The same thing as text, if you prefer it:
+
 ```
   POST /api/v1/logs ─▶ rate limit ─▶ device token ─▶ validate ─▶ id from AtomicU64
                                                           │
@@ -92,6 +96,8 @@ taking from the pool, because an export can run for minutes and must not starve
 the fast-path queries behind it.
 
 ## Authentication
+
+![Device tokens write only; the admin token or a session reads and manages](images/auth.svg)
 
 Writes are authenticated on every request, so authentication must not touch the
 database — a lookup per log line would collapse the ingest path. The token
