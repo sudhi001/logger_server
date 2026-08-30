@@ -147,7 +147,7 @@ One command:
 docker run -d --name logger -p 8080:8080 \
   -e LOGGER_ADMIN_TOKEN=pick-a-long-random-string \
   -v logger-data:/data \
-  sudhis/logger_server:3.2.0
+  sudhis/logger_server:3.3.0
 ```
 
 Open <http://localhost:8080>, sign in with that token, go to **Devices**, and
@@ -207,14 +207,13 @@ That matters for one practical reason: **it runs on the free tier of anything.**
 | Download size | 271 MB | **2.4 MB** compressed |
 | Logs accepted per second | ~2–5 k | **~68 k** |
 
-Measured, not estimated — `VmRSS` read from `/proc` on the real image. If you
-want to know *how*, [docs/architecture.md](docs/architecture.md) explains the
-three ideas that do most of the work.
+Measured, not estimated — `VmRSS` read from `/proc` on the real image.
 
-3.3.0 got these back below where they were before alerting existed, despite
-carrying a TLS stack, full-text search and an MCP server. See
-[docs/architecture.md](docs/architecture.md#where-the-size-went) for what
-actually moved the needle.
+3.3.0 cut the image in half and idle memory by 28%, ending up *below* where it
+sat before alerting existed, despite now carrying a TLS stack, full-text search
+and an MCP server. [docs/architecture.md](docs/architecture.md) explains the
+three ideas behind the memory ceiling, and
+[what actually moved the needle on size](docs/architecture.md#where-the-size-went).
 
 ## Documentation
 

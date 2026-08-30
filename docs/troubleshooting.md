@@ -76,7 +76,7 @@ Expected in two cases:
 No volume. The database lives inside the container unless you mount one:
 
 ```sh
-docker run -v logger-data:/data ... sudhis/logger_server:3.2.0
+docker run -v logger-data:/data ... sudhis/logger_server:3.3.0
 ```
 
 On a host without persistent disks — Render's free tier, for instance — storage
@@ -105,8 +105,8 @@ Podman also prefixes locally built images with `localhost/`, so push a
 fully-qualified name:
 
 ```sh
-docker tag localhost/sudhis/logger_server:3.2.0 docker.io/sudhis/logger_server:3.2.0
-docker push docker.io/sudhis/logger_server:3.2.0
+docker tag localhost/sudhis/logger_server:3.3.0 docker.io/sudhis/logger_server:3.3.0
+docker push docker.io/sudhis/logger_server:3.3.0
 ```
 
 ## Memory higher than advertised

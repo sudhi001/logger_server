@@ -12,7 +12,7 @@
 
 | Tag | Base | Image | Idle RSS | Use for |
 |---|---|---|---|---|
-| `sudhis/logger_server:3.2.0` | `scratch` (static musl) | 10.6 MB | 15.1 MB | Production. The default |
+| `sudhis/logger_server:3.3.0` | `scratch` (static musl) | 5.0 MB | 10.6 MB | Production. The default |
 | built from `Dockerfile.glibc` | `distroless/cc` | ~25 MB | higher | When you need glibc, or a shell to debug with |
 
 The default image has no operating system, no shell, and no package manager —
@@ -26,7 +26,7 @@ docker run -d --name logger \
   -p 8080:8080 \
   -e LOGGER_ADMIN_TOKEN="$(openssl rand -hex 24)" \
   -v logger-data:/data \
-  sudhis/logger_server:3.2.0
+  sudhis/logger_server:3.3.0
 ```
 
 The volume at `/data` is what makes logs survive a restart.
@@ -36,7 +36,7 @@ The volume at `/data` is what makes logs survive a restart.
 ```yaml
 services:
   logger:
-    image: sudhis/logger_server:3.2.0
+    image: sudhis/logger_server:3.3.0
     restart: unless-stopped
     ports: ["8080:8080"]
     volumes: ["logger-data:/data"]
@@ -56,7 +56,7 @@ Deploy as a **Web Service** from an existing image.
 
 | Setting | Value |
 |---|---|
-| Image URL | `docker.io/sudhis/logger_server:3.2.0` |
+| Image URL | `docker.io/sudhis/logger_server:3.3.0` |
 | Health Check Path | `/healthz` |
 | `LOGGER_ADMIN_TOKEN` | a long random string |
 | `LOGGER_TRUST_PROXY` | `true` |
@@ -132,9 +132,9 @@ copy the `-wal` and `-shm` files with it, or use `sqlite3 logs.db ".backup"`.
 ## Upgrading
 
 ```sh
-docker pull sudhis/logger_server:3.2.0
+docker pull sudhis/logger_server:3.3.0
 docker stop logger && docker rm logger
-docker run -d --name logger ... sudhis/logger_server:3.2.0
+docker run -d --name logger ... sudhis/logger_server:3.3.0
 ```
 
 Schema changes are applied automatically at startup, and the database is
