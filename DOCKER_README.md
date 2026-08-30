@@ -4,7 +4,7 @@ Two Dockerfiles are provided.
 
 | File | Base | Image size | Idle RSS | Use it for |
 |---|---|---|---|---|
-| `Dockerfile` | `scratch` (static musl) | 4.76 MB | 10.3 MB | Production. Default. |
+| `Dockerfile` | `scratch` (static musl) | 4.92 MB | 11.1 MB | Production. Default. |
 | `Dockerfile.glibc` | `distroless/cc` | ~25 MB | higher | When you need glibc or native deps. |
 
 Both are multi-stage: the dependency tree is compiled in a cached layer, so
@@ -13,13 +13,13 @@ editing `src/` does not rebuild the world.
 ## Build
 
 ```sh
-docker build --platform linux/amd64 -t sudhis/logger_server:2.0.0 .
+docker build --platform linux/amd64 -t sudhis/logger_server:3.0.0 .
 ```
 
 The glibc variant:
 
 ```sh
-docker build --platform linux/amd64 -f Dockerfile.glibc -t sudhis/logger_server:2.0.0-glibc .
+docker build --platform linux/amd64 -f Dockerfile.glibc -t sudhis/logger_server:3.0.0-glibc .
 ```
 
 `--platform linux/amd64` matters when building on Apple Silicon: the deploy
@@ -29,7 +29,7 @@ build to take a while. It is cached after the first run.
 ## Run
 
 ```sh
-docker run --rm -p 8080:8080 -v logger-data:/data sudhis/logger_server:2.0.0
+docker run --rm -p 8080:8080 -v logger-data:/data sudhis/logger_server:3.0.0
 ```
 
 The volume at `/data` is what makes logs survive a restart. Without it the
@@ -40,7 +40,7 @@ container.
 
 ```sh
 docker login
-docker push sudhis/logger_server:2.0.0
+docker push sudhis/logger_server:3.0.0
 ```
 
 ## Verify the memory claim
@@ -50,8 +50,8 @@ SQLite file. For the process's own memory, read `VmRSS` from `/proc` instead.
 
 
 ```sh
-docker run --rm -d --name lg -p 8080:8080 sudhis/logger_server:2.0.0
-docker stats --no-stream lg          # ~10 MB at idle
+docker run --rm -d --name lg -p 8080:8080 sudhis/logger_server:3.0.0
+docker stats --no-stream lg          # ~11 MB at idle
 
 # Open 500 live tails and measure again.
 for i in $(seq 1 400); do curl -N -s localhost:8080/logs/stream > /dev/null & done

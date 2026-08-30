@@ -2,7 +2,7 @@
 
 A remote log sink: mobile apps `POST` log lines, and you watch them stream live
 in a browser. Written in Rust — a single static binary in a 4.76 MB image
-that idles at 10 MB of RAM.
+that idles at 11 MB of RAM.
 
 ## Demo
 
@@ -17,17 +17,17 @@ the same URLs while making memory bounded and predictable.
 
 | | Kotlin / Spring Boot | Rust |
 |---|---|---|
-| Idle RSS | ~250–400 MB | **10.3 MB** |
+| Idle RSS | ~250–400 MB | **11.1 MB** |
 | RSS, 400 live tails | — | **17.2 MB** |
 | RSS, ~2000 live tails | — | **42.8 MB** (~16 KB/client) |
 | Cold start | 2–5 s | **~25 ms** |
-| Image size | 259 MB (compressed) | **4.76 MB** |
+| Image size | 259 MB (compressed) | **4.92 MB** |
 | Batched ingest | ~2–5 k/s | **~50 k rows/s** |
 | `GET /logs` on a huge table | loads it all into heap | streams, flat memory |
 
 Those Rust figures are measured, not estimated: `linux/amd64` image, `VmRSS`
 read from `/proc`, under emulation on Apple Silicon. The idle number breaks down
-as 6.6 MB anonymous plus 3.7 MB of file-backed binary pages.
+as 7.3 MB anonymous plus 3.8 MB of file-backed binary pages.
 
 The rewrite also fixed defects carried by the original implementation:
 
