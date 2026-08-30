@@ -37,7 +37,8 @@ The rewrite also fixed defects carried by the original implementation:
 - Logs had **no timestamp at all**; ordering relied on the autoincrement id.
 - Nothing pruned the database, so it grew until the disk filled.
 - `name` was unindexed, so lookups by name full-scanned the table.
-- Writes were unauthenticated and unthrottled.
+- Writes were unauthenticated and unthrottled, and *every log was world-readable*
+  to anyone with the URL.
 - Dead SSE clients were reaped only on `IOException`, and reconnects silently
   dropped whatever arrived in the gap.
 
@@ -75,26 +76,88 @@ task, not per-client log buffering. A disconnected client is reaped within one
 keepalive interval (15 s), since a closed socket is only detected on the next
 write.
 
+## Authentication
+
+Nothing is open. There are two kinds of credential:
+
+| | Credential | Grants |
+|---|---|---|
+| **Device** | A per-device token, `lgrd_…` | Writing logs, and nothing else |
+| **Viewer** | The admin token `lgra_…`, or a session cookie from signing in | The dashboard, all read endpoints, and device management |
+
+Every app that ships logs gets its **own** token, created from the Devices page
+or over the API. Tokens are stored only as a SHA-256 hash, so the plaintext is
+shown once at creation and is not recoverable — and a database leak does not
+hand anyone a working credential. Revoking a device drops it from the in-memory
+auth map, so its token stops working on the very next request.
+
+A log's device attribution comes from the token that sent it, never from the
+request body, so one device cannot write logs as another.
+
+```sh
+# Register a device (admin credential required).
+curl -X POST localhost:8080/api/v1/devices \
+  -H "x-admin-token: $LOGGER_ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name":"Pixel 8 — QA","platform":"Android 15"}'
+
+# Ship a log with the token it returned.
+curl -X POST localhost:8080/api/v1/logs \
+  -H "Authorization: Bearer $DEVICE_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name":"[MyApp] ","message":"hello","level":2}'
+```
+
+Set `LOGGER_ADMIN_TOKEN` to a value of your choosing. If you don't, the server
+generates one at boot and prints it to the log — usable, but it changes on every
+restart.
+
+> **This is a breaking change.** Clients that previously posted to `/logs`
+> without credentials now get `401`. Register a device and add the header.
+
+## Dashboard
+
+Reads are gated by a login, so the log stream is no longer world-readable.
+
+- **Timestamps and colour-coded levels** — trace, debug, info, warn, error.
+- **Live search** across message, tag, and device, plus level and device filters
+  that apply to backfill and the live stream alike.
+- **Pause / Follow / Clear / Copy** — freeze the view to read something (or hit
+  space), toggle tail-following, or copy the visible lines as JSON. Scrolling up
+  turns following off, the way a terminal does.
+- **Expandable rows** — long messages collapse to one line; click to expand,
+  which pretty-prints JSON payloads and preserves stack-trace newlines.
+- A connection indicator, and a bounded 5,000-line buffer so a tab left open
+  overnight does not grow until it dies.
+
 ## API
 
-| Method | Path | Notes |
-|---|---|---|
-| `POST` | `/api/v1/logs` | `202` + `{id, ts}`. Add `?sync=true` to wait for durability (`201`). |
-| `POST` | `/api/v1/logs/batch` | Array of records. The cheapest way to ingest at volume. |
-| `GET` | `/api/v1/logs/recent` | `?limit=` (max 5000), `?before_id=` for cursor pagination. |
-| `GET` | `/api/v1/logs/by-name/{name}` | Same paging params. Index-backed. |
-| `GET` | `/api/v1/logs/export` | Streams everything. `?format=ndjson` for line-delimited. |
-| `GET` | `/api/v1/logs/stream` | SSE. Honours `Last-Event-ID`; 15 s keepalive. |
-| `GET` | `/healthz` `/metrics` | Liveness and Prometheus text. |
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| `POST` | `/api/v1/logs` | device | `202` + `{id, ts}`. `?sync=true` waits for durability (`201`). |
+| `POST` | `/api/v1/logs/batch` | device | Array ingest. Returns `accepted` and `dropped`. |
+| `GET` | `/api/v1/logs/recent` | viewer | `?limit=` (max 5000), `?before_id=`, `?min_level=`, `?device_id=` |
+| `GET` | `/api/v1/logs/by-name/{name}` | viewer | Index-backed. |
+| `GET` | `/api/v1/logs/export` | viewer | Streams everything. `?format=ndjson` for line-delimited. |
+| `GET` | `/api/v1/logs/stream` | viewer | SSE. Honours `Last-Event-ID`; 15 s keepalive. |
+| `GET` `POST` | `/api/v1/devices` | viewer | List devices, or register one. |
+| `DELETE` | `/api/v1/devices/{id}` | viewer | Revoke, effective immediately. |
+| `POST` | `/api/v1/auth/login` `/logout` | — | Exchanges the admin token for a session cookie. |
+| `GET` | `/metrics` | viewer | Prometheus text. |
+| `GET` | `/healthz` | — | Public, so the platform can probe it. |
 
 ### Log record
 
 ```json
-{ "id": 1, "ts": 1788067277526, "name": "[MyApp] ", "level": 2, "message": "hello" }
+{ "id": 1, "ts": 1788067277526, "name": "[MyApp] ", "level": 2,
+  "message": "hello", "device_id": 3, "device": "Pixel 8 — QA" }
 ```
 
 `ts` (unix millis) and `level` are optional on input — omit them and the server
-fills them in, so a client that only sends `{name, message}` still works.
+fills them in, so a client that only sends `{name, message}` still works. Levels
+run 0–4 (trace, debug, info, warn, error) and are clamped to that range.
+`device_id`/`device` are attached by the server from the authenticating token
+and ignored if sent.
 
 ### Legacy routes
 
@@ -119,15 +182,18 @@ Everything is an environment variable, and every one has a working default.
 | `LOGGER_MAX_ROWS` | `1000000` | Row cap before pruning. `0` disables. |
 | `LOGGER_MAX_AGE_DAYS` | `7` | Age cap before pruning. `0` disables. |
 | `LOGGER_MAX_MESSAGE_LEN` | `50384` | Message truncation limit, matching the original. |
-| `LOGGER_API_KEY` | *(unset)* | When set, writes require a matching `X-Api-Key`. |
+| `LOGGER_ADMIN_TOKEN` | *generated* | Gates the dashboard, reads, and device management. Generated and logged if unset. |
+| `LOGGER_SESSION_TTL_HOURS` | `168` | How long a dashboard login lasts. |
+| `LOGGER_COOKIE_SECURE` | follows `TRUST_PROXY` | Send the session cookie with `Secure`. Off for plain-HTTP local use. |
 | `LOGGER_RATE_LIMIT_RPS` | `500` | Per-IP write rate. `0` disables. |
 | `LOGGER_TRUST_PROXY` | `false` | Honour `X-Forwarded-For`. Set only behind a trusted proxy. |
 | `LOGGER_SSE_CAPACITY` | `1024` | Broadcast ring size. |
 | `LOGGER_INGEST_QUEUE` | `8192` | Write queue depth before shedding. |
 | `LOGGER_LOG` | `info` | `tracing` filter, e.g. `logger_server=debug`. |
 
-> Enabling `LOGGER_API_KEY` is opt-in precisely so that deploying this version
-> breaks nothing. Set it when you want the write endpoint locked down.
+> Set `LOGGER_ADMIN_TOKEN` explicitly in any real deployment. The generated
+> fallback keeps a fresh container usable but is lost on restart, which signs
+> everyone out and changes the value you log in with.
 
 ## Running
 
@@ -166,10 +232,15 @@ database lives in the container's writable layer and is discarded with it.
 cargo test
 ```
 
-Twenty-two tests covering the API surface, legacy-route parity, cursor
+Thirty tests covering the API surface, legacy-route parity, cursor
 pagination, character-boundary truncation, batching, retention, streaming
 export, and — for SSE — live delivery, gap replay on reconnect, eviction of a
 subscriber that cannot keep up, and stream termination on shutdown.
+
+The security-relevant ones are worth naming: writes and reads are both rejected
+without a credential, a revoked token stops working on the next request, a
+device cannot forge another device's attribution, tokens never appear in the
+device listing, and the session cookie is `HttpOnly` and `SameSite=Strict`.
 
 ## Prerequisites
 

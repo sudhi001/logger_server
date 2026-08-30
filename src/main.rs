@@ -1,6 +1,7 @@
 //! Entry point.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use logger_server::config::Config;
 use logger_server::middleware::ratelimit;
@@ -57,6 +58,14 @@ async fn run(cfg: Config) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(limiter) = state.limiter.clone() {
         ratelimit::spawn_janitor(limiter);
     }
+    spawn_session_janitor(state.clone());
+
+    if state.devices.is_empty() {
+        tracing::warn!(
+            "no devices registered yet -- writes will be rejected until one is \
+             created at /devices or via POST /api/v1/devices"
+        );
+    }
 
     let app = routes::build(state.clone());
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -84,6 +93,17 @@ async fn run(cfg: Config) -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("shutdown complete");
 
     Ok(())
+}
+
+/// Drops expired sessions so the table cannot grow without bound.
+fn spawn_session_janitor(state: Arc<logger_server::state::AppState>) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(600));
+        loop {
+            tick.tick().await;
+            state.sessions.purge_expired();
+        }
+    });
 }
 
 /// Resolves on SIGTERM or SIGINT, first signalling in-flight SSE streams to end.

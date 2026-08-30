@@ -11,8 +11,11 @@ use logger_server::{build_state, routes};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
+const ADMIN: &str = "lgra_test_admin_token";
+
 struct Harness {
     port: u16,
+    device: String,
     writer: Option<logger_server::store::WriterHandle>,
     shutdown: tokio::sync::watch::Sender<bool>,
 }
@@ -29,7 +32,7 @@ async fn start(mutate: impl FnOnce(&mut Config)) -> Harness {
         .join(format!("logger_sse_{unique}_{seq}.db"))
         .to_string_lossy()
         .into_owned();
-    cfg.api_key = None;
+    cfg.admin_token = ADMIN.to_string();
     cfg.rate_limit_rps = 0;
     cfg.port = 0;
     mutate(&mut cfg);
@@ -55,11 +58,14 @@ async fn start(mutate: impl FnOnce(&mut Config)) -> Harness {
         .await;
     });
 
-    Harness {
+    let mut h = Harness {
         port,
+        device: String::new(),
         writer: Some(writer),
         shutdown,
-    }
+    };
+    h.device = h.register_device().await;
+    h
 }
 
 impl Harness {
@@ -68,7 +74,8 @@ impl Harness {
         let mut sock = TcpStream::connect(("127.0.0.1", self.port)).await.unwrap();
         let req = format!(
             "POST /api/v1/logs HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n\
-             Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+             X-Device-Token: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            self.device,
             body.len(),
             body
         );
@@ -80,9 +87,11 @@ impl Harness {
     /// Fetches the Prometheus metrics text.
     async fn metrics(&self) -> String {
         let mut sock = TcpStream::connect(("127.0.0.1", self.port)).await.unwrap();
-        sock.write_all(b"GET /metrics HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
-            .await
-            .unwrap();
+        let req = format!(
+            "GET /metrics HTTP/1.1\r\nHost: x\r\nX-Admin-Token: {ADMIN}\r\n\
+             Connection: close\r\n\r\n"
+        );
+        sock.write_all(req.as_bytes()).await.unwrap();
         let mut out = Vec::new();
         let _ = sock.read_to_end(&mut out).await;
         String::from_utf8_lossy(&out)
@@ -90,6 +99,26 @@ impl Harness {
             .filter(|l| l.starts_with("logger_"))
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    /// Registers the device whose token every write in these tests uses.
+    async fn register_device(&self) -> String {
+        let body = serde_json::json!({ "name": "sse-test-device" }).to_string();
+        let mut sock = TcpStream::connect(("127.0.0.1", self.port)).await.unwrap();
+        let req = format!(
+            "POST /api/v1/devices HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n\
+             X-Admin-Token: {ADMIN}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        sock.write_all(req.as_bytes()).await.unwrap();
+        let mut out = Vec::new();
+        let _ = sock.read_to_end(&mut out).await;
+        let text = String::from_utf8_lossy(&out);
+        let json_start = text.find('{').expect("device response body");
+        let parsed: serde_json::Value =
+            serde_json::from_str(text[json_start..].trim()).expect("device json");
+        parsed["token"].as_str().expect("token").to_string()
     }
 
     /// Posts many records in one request. Used to flood a stalled subscriber
@@ -102,7 +131,8 @@ impl Harness {
         let mut sock = TcpStream::connect(("127.0.0.1", self.port)).await.unwrap();
         let req = format!(
             "POST /api/v1/logs/batch HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n\
-             Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+             X-Device-Token: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            self.device,
             body.len(),
             body
         );
@@ -121,8 +151,10 @@ impl Harness {
         };
         // Connection: close makes the end of the response body observable as EOF;
         // with keep-alive the socket would stay open for reuse.
-        let req =
-            format!("GET /logs/stream HTTP/1.1\r\nHost: x\r\nConnection: close\r\n{extra}\r\n");
+        let req = format!(
+            "GET /logs/stream HTTP/1.1\r\nHost: x\r\nX-Admin-Token: {ADMIN}\r\n\
+             Connection: close\r\n{extra}\r\n"
+        );
         sock.write_all(req.as_bytes()).await.unwrap();
 
         let mut reader = BufReader::new(sock);

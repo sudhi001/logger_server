@@ -79,14 +79,25 @@ impl Reader {
         &self,
         limit: i64,
         before_id: Option<i64>,
+        min_level: Option<u8>,
+        device_id: Option<i64>,
     ) -> Result<Vec<LogRecord>, AppError> {
         self.with_conn(move |conn| {
             let mut stmt = conn.prepare_cached(
-                "SELECT id, ts, name, level, message FROM logs
-                 WHERE id < ?1 ORDER BY id DESC LIMIT ?2",
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+                 FROM logs l LEFT JOIN devices d ON d.id = l.device_id
+                 WHERE l.id < ?1
+                   AND l.level >= ?2
+                   AND (?3 IS NULL OR l.device_id = ?3)
+                 ORDER BY l.id DESC LIMIT ?4",
             )?;
             let cursor = before_id.unwrap_or(i64::MAX);
-            let out = collect(stmt.query(rusqlite::params![cursor, limit])?);
+            let out = collect(stmt.query(rusqlite::params![
+                cursor,
+                min_level.unwrap_or(0),
+                device_id,
+                limit
+            ])?);
             out
         })
         .await
@@ -101,8 +112,10 @@ impl Reader {
         self.with_conn(move |conn| {
             // Served by idx_logs_name_id; the original service full-scanned here.
             let mut stmt = conn.prepare_cached(
-                "SELECT id, ts, name, level, message FROM logs
-                 WHERE name = ?1 AND id < ?2 ORDER BY id DESC LIMIT ?3",
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+                 FROM logs l LEFT JOIN devices d ON d.id = l.device_id
+                 WHERE l.name = ?1 AND l.id < ?2
+                 ORDER BY l.id DESC LIMIT ?3",
             )?;
             let cursor = before_id.unwrap_or(i64::MAX);
             let out = collect(stmt.query(rusqlite::params![name, cursor, limit])?);
@@ -116,8 +129,9 @@ impl Reader {
     pub async fn since_id(&self, after_id: i64, limit: i64) -> Result<Vec<LogRecord>, AppError> {
         self.with_conn(move |conn| {
             let mut stmt = conn.prepare_cached(
-                "SELECT id, ts, name, level, message FROM logs
-                 WHERE id > ?1 ORDER BY id ASC LIMIT ?2",
+                "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+                 FROM logs l LEFT JOIN devices d ON d.id = l.device_id
+                 WHERE l.id > ?1 ORDER BY l.id ASC LIMIT ?2",
             )?;
             let out = collect(stmt.query(rusqlite::params![after_id, limit])?);
             out
@@ -179,6 +193,8 @@ fn collect(mut rows: rusqlite::Rows<'_>) -> Result<Vec<LogRecord>, AppError> {
             name: row.get(2)?,
             level: row.get(3)?,
             message: row.get(4)?,
+            device_id: row.get(5)?,
+            device: row.get(6)?,
         });
     }
     Ok(out)
@@ -192,7 +208,11 @@ fn stream_rows(
     ndjson: bool,
 ) -> Result<(), String> {
     let mut stmt = conn
-        .prepare("SELECT id, ts, name, level, message FROM logs ORDER BY id ASC")
+        .prepare(
+            "SELECT l.id, l.ts, l.name, l.level, l.message, l.device_id, d.name
+             FROM logs l LEFT JOIN devices d ON d.id = l.device_id
+             ORDER BY l.id ASC",
+        )
         .map_err(|e| e.to_string())?;
     let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
 
@@ -216,6 +236,8 @@ fn stream_rows(
             name: row.get(2).map_err(|e| e.to_string())?,
             level: row.get(3).map_err(|e| e.to_string())?,
             message: row.get(4).map_err(|e| e.to_string())?,
+            device_id: row.get(5).map_err(|e| e.to_string())?,
+            device: row.get(6).map_err(|e| e.to_string())?,
         };
 
         if ndjson {

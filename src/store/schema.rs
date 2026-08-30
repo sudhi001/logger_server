@@ -12,7 +12,53 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 CREATE INDEX IF NOT EXISTS idx_logs_name_id ON logs(name, id DESC);
 CREATE INDEX IF NOT EXISTS idx_logs_ts      ON logs(ts);
+
+CREATE TABLE IF NOT EXISTS devices (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT    NOT NULL,
+  platform     TEXT,
+  token_hash   BLOB    NOT NULL,
+  token_prefix TEXT    NOT NULL,
+  created_at   INTEGER NOT NULL,
+  last_seen    INTEGER,
+  revoked_at   INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_token_hash ON devices(token_hash);
 "#;
+
+/// Columns added after the initial release. SQLite has no `ADD COLUMN IF NOT
+/// EXISTS`, so each is applied only when absent.
+const ADDED_COLUMNS: &[(&str, &str, &str)] = &[(
+    "logs",
+    "device_id",
+    "ALTER TABLE logs ADD COLUMN device_id INTEGER",
+)];
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Brings an existing database up to the current schema.
+fn migrate(conn: &Connection) -> Result<()> {
+    for (table, column, ddl) in ADDED_COLUMNS {
+        if !column_exists(conn, table, column)? {
+            tracing::info!(table, column, "adding column");
+            conn.execute_batch(ddl)?;
+        }
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_logs_device_id ON logs(device_id, id DESC)",
+    )?;
+    Ok(())
+}
 
 /// Pragmas applied to every connection, reader and writer alike.
 ///
@@ -37,6 +83,7 @@ pub fn open_writer(path: &str) -> Result<Connection> {
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     apply_common_pragmas(&conn)?;
     conn.execute_batch(DDL)?;
+    migrate(&conn)?;
     Ok(conn)
 }
 

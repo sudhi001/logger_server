@@ -16,8 +16,12 @@ pub struct Config {
     pub max_age: Option<Duration>,
     /// Matches the original Kotlin controller's truncation limit.
     pub max_message_len: usize,
-    /// When `None`, write authentication is disabled entirely.
-    pub api_key: Option<String>,
+    /// Gates the dashboard and every read endpoint. Generated at boot if unset.
+    pub admin_token: String,
+    /// How long a dashboard login stays valid.
+    pub session_ttl: Duration,
+    /// Send the session cookie with `Secure`. Must be off for plain-HTTP local use.
+    pub cookie_secure: bool,
     /// Per-IP writes per second. `0` disables rate limiting.
     pub rate_limit_rps: u32,
     pub rate_limit_burst: u32,
@@ -28,6 +32,25 @@ pub struct Config {
     /// Bounded ingest queue depth. When full, ingest sheds load with 503.
     pub ingest_queue: usize,
     pub max_body_bytes: usize,
+}
+
+/// The admin token, generated if the operator did not supply one.
+///
+/// Generating rather than refusing to start keeps a fresh deploy usable, but the
+/// value is logged loudly because it does not survive a restart.
+fn admin_token() -> String {
+    match std::env::var("LOGGER_ADMIN_TOKEN") {
+        Ok(t) if !t.trim().is_empty() => t,
+        _ => {
+            let generated = crate::auth::token::generate(crate::auth::token::ADMIN_PREFIX);
+            tracing::warn!(
+                token = %generated,
+                "LOGGER_ADMIN_TOKEN is not set; generated a temporary one. \
+                 It changes on every restart -- set the variable to keep it stable."
+            );
+            generated
+        }
+    }
 }
 
 fn env_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
@@ -54,9 +77,16 @@ impl Config {
             // 0 days means "never prune by age".
             max_age: (max_age_days > 0).then(|| Duration::from_secs(max_age_days * 86_400)),
             max_message_len: env_parse("LOGGER_MAX_MESSAGE_LEN", 50_384),
-            api_key: std::env::var("LOGGER_API_KEY")
-                .ok()
-                .filter(|k| !k.is_empty()),
+            admin_token: admin_token(),
+            session_ttl: Duration::from_secs(
+                env_parse::<u64>("LOGGER_SESSION_TTL_HOURS", 168).clamp(1, 8760) * 3600,
+            ),
+            // Behind a proxy the browser speaks HTTPS even though we serve
+            // plain HTTP, so the cookie needs Secure there but not on localhost.
+            cookie_secure: env_parse(
+                "LOGGER_COOKIE_SECURE",
+                env_parse("LOGGER_TRUST_PROXY", false),
+            ),
             rate_limit_rps: env_parse("LOGGER_RATE_LIMIT_RPS", 500),
             rate_limit_burst: env_parse("LOGGER_RATE_LIMIT_BURST", 1_000),
             trust_proxy: env_parse("LOGGER_TRUST_PROXY", false),

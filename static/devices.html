@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devices · logger_server</title>
+  <link href="app.css" rel="stylesheet">
+</head>
+<body>
+  <div class="topbar">
+    <a href="/" class="brand">{SUDHI<span>.</span>S}</a>
+    <a href="/" class="nav-link">Logs</a>
+    <a href="/devices.html" class="nav-link active">Devices</a>
+    <div class="spacer"></div>
+    <a href="#" class="nav-link" id="logout">Sign out</a>
+  </div>
+
+  <div class="wrap">
+    <h2 style="margin-top:0">Register a device</h2>
+    <p class="hint">
+      Every app that sends logs needs its own token. Tokens are stored only as a
+      SHA-256 hash, so the value below is shown once and cannot be recovered —
+      copy it now. Revoking a device stops its token working immediately.
+    </p>
+
+    <form class="row-form" id="form">
+      <input type="text" id="name" placeholder="device name, e.g. Pixel 8 — QA" required>
+      <input type="text" id="platform" placeholder="platform (optional), e.g. Android 15">
+      <button type="submit" class="primary">Create device</button>
+    </form>
+
+    <div id="new-token" hidden>
+      <div class="token-box" id="token-value"></div>
+      <p class="hint">
+        Send it on every write as <code>Authorization: Bearer &lt;token&gt;</code>
+        or <code>X-Device-Token: &lt;token&gt;</code>. Example:
+      </p>
+      <div class="token-box" style="border-color:var(--border);color:var(--text-dim)" id="curl-example"></div>
+    </div>
+
+    <div class="error-msg" id="err"></div>
+
+    <h2>Registered devices</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th><th>Platform</th><th>Token</th>
+          <th>Created</th><th>Last seen</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="hint" id="empty" hidden>No devices yet. Writes are rejected until you create one.</p>
+  </div>
+
+  <script src="devices.js"></script>
+</body>
+</html>

@@ -22,6 +22,9 @@ pub struct ListParams {
     pub limit: Option<i64>,
     /// Cursor: return rows with a strictly smaller id.
     pub before_id: Option<i64>,
+    /// Minimum severity, so the dashboard can narrow without pulling everything.
+    pub min_level: Option<u8>,
+    pub device_id: Option<i64>,
 }
 
 impl ListParams {
@@ -36,7 +39,11 @@ pub async fn recent(
     Query(p): Query<ListParams>,
 ) -> Result<Json<Vec<LogRecord>>, AppError> {
     Ok(Json(
-        state.store.reader.recent(p.limit(), p.before_id).await?,
+        state
+            .store
+            .reader
+            .recent(p.limit(), p.before_id, p.min_level, p.device_id)
+            .await?,
     ))
 }
 

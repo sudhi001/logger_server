@@ -3,7 +3,7 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use axum::extract::{Query, State};
+use axum::extract::{Extension, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::Deserialize;
@@ -12,6 +12,7 @@ use crate::error::AppError;
 use crate::hub::LogFrame;
 use crate::model::{now_millis, BatchAck, IngestAck, LogRecord, NewLog};
 use crate::state::AppState;
+use crate::store::devices::DeviceIdentity;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct IngestParams {
@@ -24,7 +25,12 @@ pub struct IngestParams {
 ///
 /// Truncation is done on a character boundary: slicing a UTF-8 string at a
 /// fixed byte offset would panic mid-codepoint.
-fn to_record(state: &AppState, id: i64, input: NewLog) -> Result<LogRecord, AppError> {
+fn to_record(
+    state: &AppState,
+    device: &DeviceIdentity,
+    id: i64,
+    input: NewLog,
+) -> Result<LogRecord, AppError> {
     if input.name.is_empty() && input.message.is_empty() {
         return Err(AppError::BadRequest(
             "at least one of name or message is required".into(),
@@ -49,8 +55,13 @@ fn to_record(state: &AppState, id: i64, input: NewLog) -> Result<LogRecord, AppE
         id,
         ts: input.ts.unwrap_or_else(now_millis),
         name,
-        level: input.level.unwrap_or(2),
+        // Clamped so a client cannot invent levels the UI has no colour for.
+        level: input.level.unwrap_or(2).min(4),
         message,
+        // Taken from the authenticated token, never from the request body, so
+        // one device cannot attribute its logs to another.
+        device_id: Some(device.id),
+        device: Some(device.name.clone()),
     })
 }
 
@@ -71,11 +82,12 @@ fn dispatch(state: &AppState, rec: LogRecord) -> Result<(), AppError> {
 
 pub async fn ingest_one(
     State(state): State<Arc<AppState>>,
+    Extension(device): Extension<DeviceIdentity>,
     Query(params): Query<IngestParams>,
     Json(input): Json<NewLog>,
 ) -> Result<(StatusCode, Json<IngestAck>), AppError> {
     let id = state.store.next_id();
-    let rec = to_record(&state, id, input)?;
+    let rec = to_record(&state, &device, id, input)?;
     let ack = IngestAck {
         id: rec.id,
         ts: rec.ts,
@@ -101,6 +113,7 @@ pub async fn ingest_one(
 
 pub async fn ingest_batch(
     State(state): State<Arc<AppState>>,
+    Extension(device): Extension<DeviceIdentity>,
     Json(inputs): Json<Vec<NewLog>>,
 ) -> Result<(StatusCode, Json<BatchAck>), AppError> {
     if inputs.is_empty() {
@@ -115,7 +128,7 @@ pub async fn ingest_batch(
 
     for (idx, input) in inputs.into_iter().enumerate() {
         let id = state.store.next_id();
-        let rec = to_record(&state, id, input)?;
+        let rec = to_record(&state, &device, id, input)?;
         let rec_id = rec.id;
 
         // A full queue mid-batch reports what was accepted rather than

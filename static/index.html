@@ -1,29 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Logs Stream</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="log.css" rel="stylesheet"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Logs · logger_server</title>
+  <link href="app.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 font-sans">
-<!-- Navbar -->
-<nav class="bg-white shadow-md">
-    <div class="container mx-auto px-4 py-2 flex justify-between items-center">
-        <a href="#" class="text-xl font-bold text-gray-800">{SUDHI.S}</a>
-        <div class="flex space-x-4">
-            <a href="#" class="text-gray-600 hover:text-gray-800">sudhis@live.com</a>
-        </div>
-    </div>
-</nav>
+<body>
+  <div class="topbar">
+    <a href="/" class="brand">{SUDHI<span>.</span>S}</a>
+    <a href="/" class="nav-link active">Logs</a>
+    <a href="/devices.html" class="nav-link">Devices</a>
 
-<div class="container-full mx-auto">
-    <div class="border border-gray-300 bg-black text-green-500 font-mono p-4 rounded-lg overflow-hidden h-full">
-        <div id="logs" class="overflow-y-auto h-full flex flex-col-reverse"></div>
-    </div>
-</div>
+    <input type="text" id="search" placeholder="filter messages…" autocomplete="off">
 
-<script src="logs.js"></script>
+    <select id="level">
+      <option value="0">all levels</option>
+      <option value="1">debug+</option>
+      <option value="2">info+</option>
+      <option value="3">warn+</option>
+      <option value="4">error only</option>
+    </select>
+
+    <select id="device"><option value="">all devices</option></select>
+
+    <button id="pause" title="Freeze the view (space)">Pause</button>
+    <button id="follow" class="on" title="Scroll to newest">Follow</button>
+    <button id="clear" title="Empty the view">Clear</button>
+    <button id="copy" title="Copy visible lines as JSON">Copy</button>
+
+    <div class="spacer"></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting</span></div>
+    <a href="#" class="nav-link" id="logout">Sign out</a>
+  </div>
+
+  <div id="logs"><div class="empty">Waiting for logs…</div></div>
+
+  <div class="statusbar">
+    <span id="count">0 lines</span>
+    <span id="shown"></span>
+    <span class="spacer"></span>
+    <span class="dim">click a line to expand · space to pause</span>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>

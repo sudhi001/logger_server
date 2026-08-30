@@ -43,7 +43,16 @@ pub async fn metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
          logger_sse_clients {}\n\
          # HELP logger_rows Rows currently stored.\n\
          # TYPE logger_rows gauge\n\
-         logger_rows {}\n",
+         logger_rows {}\n\
+         # HELP logger_auth_failures_total Rejected dashboard logins.\n\
+         # TYPE logger_auth_failures_total counter\n\
+         logger_auth_failures_total {}\n\
+         # HELP logger_devices_active Registered devices with a live token.\n\
+         # TYPE logger_devices_active gauge\n\
+         logger_devices_active {}\n\
+         # HELP logger_sessions_active Dashboard sessions currently valid.\n\
+         # TYPE logger_sessions_active gauge\n\
+         logger_sessions_active {}\n",
         m.ingested.load(Ordering::Relaxed),
         m.shed.load(Ordering::Relaxed),
         m.rate_limited.load(Ordering::Relaxed),
@@ -51,6 +60,9 @@ pub async fn metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         m.sse_evicted.load(Ordering::Relaxed),
         state.hub.subscriber_count(),
         rows,
+        m.auth_failures.load(Ordering::Relaxed),
+        state.devices.len(),
+        state.sessions.len(),
     );
 
     ([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body)

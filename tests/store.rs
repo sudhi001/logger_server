@@ -30,6 +30,8 @@ fn record(store: &Store, name: &str, message: &str) -> LogRecord {
         name: name.to_string(),
         level: 2,
         message: message.to_string(),
+        device_id: None,
+        device: None,
     }
 }
 
@@ -71,7 +73,7 @@ async fn ids_stay_monotonic_across_a_retention_prune() {
     // Retention runs on a 10s cadence on the writer thread; shutdown forces a
     // final flush, so re-open afterwards to observe the pruned state.
     settle().await;
-    let before = store.reader.recent(1, None).await.unwrap();
+    let before = store.reader.recent(1, None, None, None).await.unwrap();
     assert_eq!(
         before[0].id, 500,
         "ids come from the app counter, not rowid"

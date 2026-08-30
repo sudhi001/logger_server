@@ -1,6 +1,7 @@
 //! Remote log sink: ingest, persist, and live-tail application logs.
 
 pub mod assets;
+pub mod auth;
 pub mod config;
 pub mod error;
 pub mod handlers;
@@ -30,9 +31,14 @@ pub fn build_state(
     let limiter = middleware::ratelimit::build(cfg.rate_limit_rps, cfg.rate_limit_burst);
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
+    let devices = store.devices.clone();
+    let sessions = crate::auth::session::Sessions::new(cfg.session_ttl);
+
     let state = Arc::new(AppState {
         hub,
         limiter,
+        devices,
+        sessions,
         store,
         metrics: Metrics::default(),
         shutdown: shutdown_rx,

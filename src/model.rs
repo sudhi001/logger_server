@@ -15,7 +15,17 @@ pub struct LogRecord {
     pub name: String,
     pub level: u8,
     pub message: String,
+    /// Which registered device sent this. `None` only for rows written before
+    /// device authentication existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<i64>,
+    /// Resolved device name, attached on read for display. Never stored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
 }
+
+/// Level scale. `info` is 2, matching the default the original service implied.
+pub const LEVEL_NAMES: [&str; 5] = ["trace", "debug", "info", "warn", "error"];
 
 /// Inbound body for `POST /api/v1/logs`.
 ///
@@ -32,6 +42,33 @@ pub struct NewLog {
 }
 
 /// Acknowledgement returned by the ingest endpoints.
+#[derive(Debug, Clone, Serialize)]
+pub struct Device {
+    pub id: i64,
+    pub name: String,
+    pub platform: Option<String>,
+    /// Leading characters of the token, for recognition only.
+    pub token_prefix: String,
+    pub created_at: i64,
+    pub last_seen: Option<i64>,
+    pub revoked: bool,
+}
+
+/// Returned once, at creation. The plaintext token is never retrievable again.
+#[derive(Debug, Serialize)]
+pub struct DeviceCreated {
+    #[serde(flatten)]
+    pub device: Device,
+    pub token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewDevice {
+    pub name: String,
+    #[serde(default)]
+    pub platform: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct IngestAck {
     pub id: i64,

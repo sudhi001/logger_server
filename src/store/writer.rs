@@ -18,6 +18,7 @@ use tokio::sync::oneshot;
 
 use crate::config::Config;
 use crate::model::LogRecord;
+use crate::store::devices::{self, DeviceCache};
 use crate::store::{retention, schema};
 
 const MAX_BATCH: usize = 256;
@@ -34,7 +35,13 @@ pub struct WriteItem {
 ///
 /// `recv_timeout` rather than `recv` so that the retention sweep still fires on
 /// an otherwise idle server, and so shutdown is observed promptly.
-pub fn run(mut conn: Connection, rx: Receiver<WriteItem>, cfg: Config, draining: Arc<AtomicBool>) {
+pub fn run(
+    mut conn: Connection,
+    rx: Receiver<WriteItem>,
+    cfg: Config,
+    draining: Arc<AtomicBool>,
+    device_cache: Arc<DeviceCache>,
+) {
     let mut batch: Vec<WriteItem> = Vec::with_capacity(MAX_BATCH);
     let mut last_retention = Instant::now();
 
@@ -62,6 +69,7 @@ pub fn run(mut conn: Connection, rx: Receiver<WriteItem>, cfg: Config, draining:
 
         if last_retention.elapsed() >= RETENTION_INTERVAL {
             retention::prune(&conn, &cfg);
+            flush_seen(&conn, &device_cache);
             last_retention = Instant::now();
         }
     }
@@ -80,9 +88,18 @@ pub fn run(mut conn: Connection, rx: Receiver<WriteItem>, cfg: Config, draining:
         commit_batch(&mut conn, &mut batch);
     }
 
+    flush_seen(&conn, &device_cache);
+
     // Fold the WAL back into the main file so the next boot starts clean.
     let _ = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE");
     tracing::info!("writer thread stopped");
+}
+
+fn flush_seen(conn: &Connection, cache: &DeviceCache) {
+    let pending = cache.take_pending_seen();
+    if let Err(e) = devices::flush_last_seen(conn, &pending) {
+        tracing::warn!(error = %e, "failed to persist device activity");
+    }
 }
 
 fn commit_batch(conn: &mut Connection, batch: &mut Vec<WriteItem>) {
@@ -109,11 +126,19 @@ fn insert_all(conn: &mut Connection, batch: &[WriteItem]) -> rusqlite::Result<()
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "INSERT OR REPLACE INTO logs (id, ts, name, level, message) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT OR REPLACE INTO logs (id, ts, name, level, message, device_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
         for item in batch {
             let r = &item.rec;
-            stmt.execute(rusqlite::params![r.id, r.ts, r.name, r.level, r.message])?;
+            stmt.execute(rusqlite::params![
+                r.id,
+                r.ts,
+                r.name,
+                r.level,
+                r.message,
+                r.device_id
+            ])?;
         }
     }
     tx.commit()

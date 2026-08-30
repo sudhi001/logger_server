@@ -1,5 +1,6 @@
 //! Storage facade: id allocation, the bounded write queue, and the read pool.
 
+pub mod devices;
 pub mod reader;
 pub mod retention;
 pub mod schema;
@@ -8,14 +9,17 @@ pub mod writer;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread::JoinHandle;
 
+use rusqlite::Connection;
 use tokio::sync::oneshot;
 
 use crate::config::Config;
 use crate::error::AppError;
 use crate::model::LogRecord;
 
+pub use devices::DeviceCache;
 pub use reader::Reader;
 pub use writer::WriteItem;
 
@@ -24,6 +28,14 @@ pub struct Store {
     tx: SyncSender<WriteItem>,
     draining: Arc<AtomicBool>,
     pub reader: Reader,
+    pub devices: Arc<DeviceCache>,
+    /// A second read-write connection used only for device administration.
+    ///
+    /// The writer thread owns the connection on the hot path; device create and
+    /// revoke are a handful of operations per day, so letting them take their
+    /// own connection is far simpler than routing them through the write queue.
+    /// WAL plus `busy_timeout` serialises the two safely.
+    admin: Mutex<Connection>,
 }
 
 /// Returned to `main` so it can flush the writer on shutdown.
@@ -46,6 +58,8 @@ impl Store {
     pub fn open(cfg: &Config) -> Result<(Self, WriterHandle), AppError> {
         let (conn, max_id) = writer::open(cfg)?;
         let reader = Reader::new(&cfg.db_path, cfg.reader_conns)?;
+        let device_cache = Arc::new(DeviceCache::load(&conn)?);
+        let admin = schema::open_writer(&cfg.db_path)?;
 
         // Bounded: when full, ingest sheds load rather than growing memory.
         let (tx, rx) = sync_channel::<WriteItem>(cfg.ingest_queue);
@@ -54,9 +68,10 @@ impl Store {
         let thread = {
             let cfg = cfg.clone();
             let draining = draining.clone();
+            let devices = device_cache.clone();
             std::thread::Builder::new()
                 .name("sqlite-writer".into())
-                .spawn(move || writer::run(conn, rx, cfg, draining))
+                .spawn(move || writer::run(conn, rx, cfg, draining, devices))
                 .map_err(|e| AppError::Internal(format!("cannot spawn writer: {e}")))?
         };
 
@@ -68,6 +83,8 @@ impl Store {
                 tx,
                 draining: draining.clone(),
                 reader,
+                devices: device_cache,
+                admin: Mutex::new(admin),
             },
             WriterHandle {
                 draining,
@@ -101,6 +118,18 @@ impl Store {
             ack: Some(ack),
         })?;
         Ok(rx)
+    }
+
+    /// Runs a device-administration statement against the admin connection.
+    pub fn with_admin<T>(
+        &self,
+        f: impl FnOnce(&Connection, &DeviceCache) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let conn = self
+            .admin
+            .lock()
+            .map_err(|_| AppError::Internal("admin connection poisoned".into()))?;
+        f(&conn, &self.devices)
     }
 
     fn send(&self, item: WriteItem) -> Result<(), AppError> {

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in · logger_server</title>
+  <link href="app.css" rel="stylesheet">
+</head>
+<body>
+  <div class="center">
+    <form class="card" id="form">
+      <h1>logger_server</h1>
+      <p>
+        Enter the admin token to view logs. It is the value of
+        <code>LOGGER_ADMIN_TOKEN</code>; if that variable is unset, the server
+        prints a temporary one to its log at startup.
+      </p>
+      <input type="password" id="token" placeholder="lgra_…" autocomplete="current-password" autofocus>
+      <button type="submit" class="primary">Sign in</button>
+      <div class="error-msg" id="err"></div>
+    </form>
+  </div>
+  <script src="login.js"></script>
+</body>
+</html>
