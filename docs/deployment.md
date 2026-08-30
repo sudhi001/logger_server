@@ -1,5 +1,13 @@
 # Deployment
 
+## Getting it
+
+| Channel | Command |
+|---|---|
+| Docker | `docker pull sudhis/logger_server:latest` |
+| Homebrew (macOS) | `brew install sudhi001/tap/logger-server` |
+| crates.io | `cargo install logger_server` |
+
 ## Images
 
 | Tag | Base | Image | Idle RSS | Use for |

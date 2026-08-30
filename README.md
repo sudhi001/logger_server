@@ -230,14 +230,23 @@ be told when something breaks, but it is a real cost and not worth hiding.
 | [Migrating to v3](docs/migration.md) | The breaking changes, and how to move |
 | [Troubleshooting](docs/troubleshooting.md) | The errors you're most likely to hit |
 
-## Running it yourself
+## Installing it
 
-**macOS, without Docker:**
+Three ways, all the same build:
 
 ```sh
+# macOS, no Docker needed
 brew install sudhi001/tap/logger-server
-logger-server
+
+# Anywhere with a Rust toolchain
+cargo install logger_server
+
+# Anywhere with Docker
+docker pull sudhis/logger_server:latest
 ```
+
+Then `logger_server` (or `docker run`, as above). Set `LOGGER_ADMIN_TOKEN` to
+something long and random; that token is how you sign in.
 
 **From source** — Rust 1.80 or newer. No JVM, no Gradle:
 
@@ -246,7 +255,11 @@ cargo run --release      # starts on :8080
 cargo test               # 58 tests
 ```
 
-Or take the image from [Docker Hub](https://hub.docker.com/r/sudhis/logger_server).
+| Channel | |
+|---|---|
+| crates.io | [`logger_server`](https://crates.io/crates/logger_server) |
+| Docker Hub | [`sudhis/logger_server`](https://hub.docker.com/r/sudhis/logger_server) |
+| Homebrew | [`sudhi001/tap/logger-server`](https://github.com/sudhi001/homebrew-tap) |
 
 ## Licence
 

@@ -19,7 +19,9 @@ Two flags worth understanding:
 - **`-v logger-data:/data`** is what makes logs survive a restart. Without it
   the database lives inside the container and disappears with it.
 
-Prefer to run it from source? `cargo run --release` does the same thing.
+Prefer not to use Docker? `brew install sudhi001/tap/logger-server` on macOS, or
+`cargo install logger_server` anywhere with a Rust toolchain — then run
+`logger_server` with the same environment variables.
 
 Check it came up:
 
