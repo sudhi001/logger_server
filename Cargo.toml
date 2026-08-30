@@ -1,6 +1,6 @@
 [package]
 name = "logger_server"
-version = "3.3.0"
+version = "3.4.0"
 edition = "2021"
 rust-version = "1.80"
 description = "Self-hosted remote logger for mobile apps: live browser tail, per-device tokens, webhook alerting, and an MCP endpoint for AI agents"

@@ -71,12 +71,27 @@ Expected in two cases:
   keepalive every 15 seconds, which is enough for nginx and Render. Other
   proxies may need response buffering disabled explicitly.
 
+## The container exits immediately after upgrading to 3.4.0
+
+The image now runs as uid 65532 instead of root, and a volume created by an
+older version is still owned by root. SQLite cannot create its write-ahead log
+next to the database, so the server gives up on startup.
+
+```sh
+docker logs logger        # "unable to open database file" or a permission error
+docker run --rm -v logger-data:/data alpine chown -R 65532:65532 /data
+```
+
+Then start it again. A bind mount needs the same treatment on the host
+directory. `--user 0:0` reverts to the old behaviour if you would rather not
+migrate.
+
 ## Logs vanish after a restart
 
 No volume. The database lives inside the container unless you mount one:
 
 ```sh
-docker run -v logger-data:/data ... sudhis/logger_server:3.3.0
+docker run -v logger-data:/data ... sudhis/logger_server:3.4.0
 ```
 
 On a host without persistent disks — Render's free tier, for instance — storage
@@ -105,8 +120,8 @@ Podman also prefixes locally built images with `localhost/`, so push a
 fully-qualified name:
 
 ```sh
-docker tag localhost/sudhis/logger_server:3.3.0 docker.io/sudhis/logger_server:3.3.0
-docker push docker.io/sudhis/logger_server:3.3.0
+docker tag localhost/sudhis/logger_server:3.4.0 docker.io/sudhis/logger_server:3.4.0
+docker push docker.io/sudhis/logger_server:3.4.0
 ```
 
 ## Memory higher than advertised

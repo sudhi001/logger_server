@@ -37,7 +37,7 @@ exposure than the writes.
 docker run -d --name logger -p 8080:8080 \
   -e LOGGER_ADMIN_TOKEN="$(openssl rand -hex 24)" \
   -v logger-data:/data \
-  sudhis/logger_server:3.3.0
+  sudhis/logger_server:3.4.0
 ```
 
 Your existing database is migrated in place at startup — a `device_id` column is
@@ -74,6 +74,18 @@ until users update you are blind to them. Two ways to soften that:
 
 The Devices page shows **Last seen** per device, which is the quickest way to
 confirm a build has actually migrated.
+
+## 3.3.0 to 3.4.0 — the container user changed
+
+The image runs as uid 65532 rather than root. If you mount a volume that an
+older version created, chown it once before starting:
+
+```sh
+docker run --rm -v logger-data:/data alpine chown -R 65532:65532 /data
+```
+
+Nothing else changes: same API, same database, same configuration. Installs via
+Homebrew or `cargo install` are unaffected, since they are not containerised.
 
 ## Existing logs
 

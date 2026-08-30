@@ -16,9 +16,15 @@ COPY src ./src
 COPY static ./static
 RUN touch src/main.rs && cargo build --release
 
-FROM gcr.io/distroless/cc-debian12
-WORKDIR /data
+RUN mkdir -p /out/data
+
+# The :nonroot tag ships a 65532 user, matching the scratch image's uid so the
+# two variants can share a volume.
+FROM gcr.io/distroless/cc-debian12:nonroot
+COPY --from=builder --chown=65532:65532 /out /
 COPY --from=builder /build/target/release/logger_server /logger_server
+USER 65532:65532
+WORKDIR /data
 ENV LOGGER_DB_PATH=/data/logs.db
 # Caps glibc's per-thread arenas, which would otherwise inflate RSS well past
 # what the process actually uses.

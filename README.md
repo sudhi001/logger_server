@@ -147,8 +147,13 @@ One command:
 docker run -d --name logger -p 8080:8080 \
   -e LOGGER_ADMIN_TOKEN=pick-a-long-random-string \
   -v logger-data:/data \
-  sudhis/logger_server:3.3.0
+  sudhis/logger_server:3.4.0
 ```
+
+> Upgrading an existing install? The container runs as uid 65532 from 3.4.0, so
+> a volume created by an older version needs
+> `docker run --rm -v logger-data:/data alpine chown -R 65532:65532 /data` once.
+> [Details](docs/deployment.md#it-runs-as-a-non-root-user).
 
 Open <http://localhost:8080>, sign in with that token, go to **Devices**, and
 create one. Copy the token it gives you — it's shown once — then prove it works:
@@ -252,7 +257,7 @@ something long and random; that token is how you sign in.
 
 ```sh
 cargo run --release      # starts on :8080
-cargo test               # 59 tests
+cargo test               # 60 tests
 ```
 
 | Channel | |

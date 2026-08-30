@@ -147,8 +147,10 @@ fn insert_all(conn: &mut Connection, batch: &[WriteItem]) -> rusqlite::Result<()
 }
 
 /// Opens the writer connection and returns it with the highest existing id.
-pub fn open(cfg: &Config) -> rusqlite::Result<(Connection, i64)> {
-    let conn = schema::open_writer(&cfg.db_path)?;
+pub fn open(cfg: &Config) -> Result<(Connection, i64), crate::error::AppError> {
+    let conn = schema::open_writer(&cfg.db_path).map_err(|e| {
+        crate::error::AppError::Internal(schema::describe_open_failure(&cfg.db_path, &e))
+    })?;
     let max = schema::max_id(&conn)?;
     Ok((conn, max))
 }

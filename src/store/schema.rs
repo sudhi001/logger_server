@@ -166,6 +166,71 @@ fn apply_common_pragmas(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Explains a failure to open the database in terms of what to actually do.
+///
+/// SQLite reports a directory it cannot write into as "attempt to write a
+/// readonly database", which sends people looking for a read-only flag that
+/// does not exist. The container runs as uid 65532, so the usual cause is a
+/// volume still owned by root from an older version.
+pub fn describe_open_failure(path: &str, err: &rusqlite::Error) -> String {
+    let dir = std::path::Path::new(path)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+
+    if dir_is_writable(dir) {
+        return format!("cannot open the database at {path}: {err}");
+    }
+
+    format!(
+        "cannot open the database at {path}: {err}\n\
+         \n\
+         The directory {} is not writable by this process (uid {}). SQLite needs \
+         to create logs.db-wal and logs.db-shm alongside the database, not just \
+         the database file.\n\
+         \n\
+         If this is a Docker volume created before version 3.4.0, it is still \
+         owned by root while the container now runs as uid 65532. Fix it once:\n\
+         \n\
+         \x20 docker run --rm -v <volume>:/data alpine chown -R 65532:65532 /data",
+        dir.display(),
+        current_uid()
+    )
+}
+
+/// Whether *this* process can create a file in `dir`.
+///
+/// `Permissions::readonly()` is the obvious-looking call and the wrong one: it
+/// reports the mode bits, so a root-owned 0755 directory reads as writable even
+/// though an unprivileged process cannot touch it — which is exactly the case
+/// this message exists to explain. Actually creating a file is the only honest
+/// test.
+fn dir_is_writable(dir: &std::path::Path) -> bool {
+    let probe = dir.join(".logger_server_write_probe");
+    match std::fs::File::create(&probe) {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// `geteuid` without pulling in a dependency for one call.
+fn current_uid() -> u32 {
+    #[cfg(unix)]
+    {
+        extern "C" {
+            fn geteuid() -> u32;
+        }
+        unsafe { geteuid() }
+    }
+    #[cfg(not(unix))]
+    {
+        0
+    }
+}
+
 /// Opens the single read-write connection and initialises the schema.
 pub fn open_writer(path: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
@@ -193,4 +258,29 @@ pub fn open_reader(path: &str) -> Result<Connection> {
 /// Highest id currently stored, used to seed the ingest counter at boot.
 pub fn max_id(conn: &Connection) -> Result<i64> {
     conn.query_row("SELECT COALESCE(MAX(id), 0) FROM logs", [], |r| r.get(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writability_is_tested_by_writing_not_by_mode_bits() {
+        let base = std::env::temp_dir().join(format!(
+            "logger_probe_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        assert!(dir_is_writable(&base), "a fresh temp dir is writable");
+
+        // A directory that does not exist is not writable, and must not panic.
+        assert!(!dir_is_writable(&base.join("does-not-exist")));
+
+        // The probe file must not be left behind.
+        assert_eq!(std::fs::read_dir(&base).unwrap().count(), 0);
+        std::fs::remove_dir_all(&base).ok();
+    }
 }
