@@ -1,10 +1,30 @@
 [package]
 name = "logger_server"
-version = "3.2.0"
+version = "3.2.1"
 edition = "2021"
 rust-version = "1.80"
-description = "Remote log sink for mobile application developers"
+description = "Self-hosted remote logger for mobile apps: live browser tail, per-device tokens, webhook alerting, and an MCP endpoint for AI agents"
 license = "MIT"
+repository = "https://github.com/sudhi001/logger_server"
+homepage = "https://github.com/sudhi001/logger_server"
+documentation = "https://github.com/sudhi001/logger_server/blob/main/docs/quickstart.md"
+readme = "README.md"
+keywords = ["logging", "logger", "mobile", "observability", "mcp"]
+categories = [
+    "development-tools::debugging",
+    "web-programming::http-server",
+    "command-line-utilities",
+]
+# static/ is compiled into the binary with include_bytes!, so it must ship.
+# docs/ is 500 KB of screenshots; crates.io resolves relative links against the
+# repository, so the README still renders them without carrying the weight.
+exclude = [
+    "docs/",
+    "Dockerfile*",
+    ".dockerignore",
+    ".github/",
+    "tests/",
+]
 
 [dependencies]
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "tower-log"] }

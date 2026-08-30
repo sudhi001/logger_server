@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/icon.svg" alt="" width="88" height="88">
+</p>
+
 <h1 align="center">Remote Logger</h1>
 
 <p align="center">

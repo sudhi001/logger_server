@@ -16,6 +16,7 @@ pub struct Asset {
 const HTML: &str = "text/html; charset=utf-8";
 const JS: &str = "application/javascript; charset=utf-8";
 const CSS: &str = "text/css; charset=utf-8";
+const SVG: &str = "image/svg+xml";
 
 macro_rules! asset {
     ($path:literal, $ctype:expr, $tag:literal) => {
@@ -38,6 +39,7 @@ pub fn lookup(path: &str) -> Option<Asset> {
         "/devices.js" => asset!("devices.js", JS, "devicesjs"),
         "/alerts.js" => asset!("alerts.js", JS, "alertsjs"),
         "/app.css" => asset!("app.css", CSS, "appcss"),
+        "/icon.svg" | "/favicon.ico" => asset!("icon.svg", SVG, "icon"),
         _ => None,
     }
 }
