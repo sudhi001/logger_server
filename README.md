@@ -9,6 +9,7 @@
   <a href="docs/quickstart.md">Quick start</a> ·
   <a href="docs/clients.md">Connect your app</a> ·
   <a href="docs/agents.md">Connect an AI agent</a> ·
+  <a href="docs/alerting.md">Alerting</a> ·
   <a href="docs/api.md">API</a>
 </p>
 
@@ -78,6 +79,12 @@ errors:
 **Search everything you have ever logged.** Full-text search across all history
 — not just what is on screen — filtered by level, device, tag or time range.
 
+**Get told when something breaks.** Alert rules watch the stream and post to
+Slack, Discord, PagerDuty or any webhook — with a threshold and cooldown, so a
+crash loop sends one message rather than a thousand:
+
+![The alerts page, with one rule showing a failing webhook](docs/images/alerts.jpg)
+
 **Give every tester their own credential.** One per build, per phone, per person
 — so you can see whose logs you're reading, and cut one off without disturbing
 anyone else:
@@ -136,7 +143,7 @@ One command:
 docker run -d --name logger -p 8080:8080 \
   -e LOGGER_ADMIN_TOKEN=pick-a-long-random-string \
   -v logger-data:/data \
-  sudhis/logger_server:3.0.0
+  sudhis/logger_server:3.2.0
 ```
 
 Open <http://localhost:8080>, sign in with that token, go to **Devices**, and
@@ -190,15 +197,19 @@ That matters for one practical reason: **it runs on the free tier of anything.**
 
 | | Before (JVM) | Now (Rust) |
 |---|---|---|
-| Memory, idle | ~250–400 MB | **11.1 MB** |
-| Memory, 400 people watching | — | **17.2 MB** |
+| Memory, idle | ~250–400 MB | **15.1 MB** |
+| Memory, 400 people watching | — | **~21 MB** |
 | Startup | 2–5 seconds | **~25 ms** |
-| Download size | 271 MB | **2.5 MB** |
+| Download size | 271 MB | **~5 MB** compressed |
 | Logs accepted per second | ~2–5 k | **~38 k** (with search indexing) |
 
 Measured, not estimated — `VmRSS` read from `/proc` on the real image. If you
 want to know *how*, [docs/architecture.md](docs/architecture.md) explains the
 three ideas that do most of the work.
+
+Those numbers went up in 3.2.0: adding webhook alerting means shipping a TLS
+stack, which cost about 5 MB of image and 4 MB of resident memory. Worth it to
+be told when something breaks, but it is a real cost and not worth hiding.
 
 ## Documentation
 
@@ -209,6 +220,7 @@ three ideas that do most of the work.
 | [API reference](docs/api.md) | Every endpoint, parameter and status code |
 | [Configuration](docs/configuration.md) | Every setting, and when you'd change it |
 | [Connect an AI agent](docs/agents.md) | MCP setup, the tools, and the access model |
+| [Alerting](docs/alerting.md) | Webhook rules, thresholds, and outbound safety |
 | [Deployment](docs/deployment.md) | Docker, Compose, Render, nginx, production checklist |
 | [Architecture](docs/architecture.md) | How it works inside, and why it's built this way |
 | [Migrating to v3](docs/migration.md) | The breaking changes, and how to move |
@@ -227,7 +239,7 @@ logger-server
 
 ```sh
 cargo run --release      # starts on :8080
-cargo test               # 43 tests
+cargo test               # 58 tests
 ```
 
 Or take the image from [Docker Hub](https://hub.docker.com/r/sudhis/logger_server).

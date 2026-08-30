@@ -34,7 +34,7 @@ async fn app(mutate: impl FnOnce(&mut Config)) -> Harness {
     cfg.rate_limit_rps = 0;
     mutate(&mut cfg);
 
-    let (state, writer, shutdown) = build_state(cfg).expect("state");
+    let (state, writer, shutdown, _alert_rx) = build_state(cfg).expect("state");
     // Leaking the shutdown sender keeps the watch channel open for the test.
     std::mem::forget(shutdown);
     let app = routes::build(state);

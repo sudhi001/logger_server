@@ -24,6 +24,34 @@ CREATE TABLE IF NOT EXISTS devices (
   revoked_at   INTEGER
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_token_hash ON devices(token_hash);
+
+CREATE TABLE IF NOT EXISTS alert_rules (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT    NOT NULL,
+  enabled       INTEGER NOT NULL DEFAULT 1,
+
+  -- What to match. NULL means "any".
+  min_level     INTEGER NOT NULL DEFAULT 4,
+  device_id     INTEGER,
+  name_filter   TEXT,
+  contains      TEXT,
+
+  -- When to fire: `threshold` matches inside `window_secs`, then silent for
+  -- `cooldown_secs` so a crash loop is one alert rather than a thousand.
+  threshold     INTEGER NOT NULL DEFAULT 1,
+  window_secs   INTEGER NOT NULL DEFAULT 300,
+  cooldown_secs INTEGER NOT NULL DEFAULT 900,
+
+  -- Where to send it.
+  url           TEXT    NOT NULL,
+  format        TEXT    NOT NULL DEFAULT 'generic',
+  secret        TEXT,
+
+  created_at    INTEGER NOT NULL,
+  last_fired_at INTEGER,
+  fire_count    INTEGER NOT NULL DEFAULT 0,
+  last_error    TEXT
+);
 "#;
 
 /// Full-text search over log text.

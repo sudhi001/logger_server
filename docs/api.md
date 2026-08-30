@@ -288,6 +288,48 @@ this to decide whether to render or bounce to the login page.
 route away before the process exits. Public, so a platform health check works
 without credentials.
 
+## Alerts
+
+See [alerting.md](alerting.md) for the concepts.
+
+### `GET /api/v1/alerts` — viewer
+
+Every rule, with `fire_count`, `last_fired_at` and `last_error`. The signing
+secret is never returned; `signed` says whether one is set.
+
+### `POST /api/v1/alerts` — viewer
+
+| Field | Default | Notes |
+|---|---|---|
+| `name` | *required* | |
+| `url` | *required* | Checked against the outbound guard before it is stored |
+| `format` | `generic` | `generic`, `slack`, `discord`, `pagerduty` |
+| `min_level` | `4` | Minimum severity to match |
+| `contains` | — | Case-insensitive substring of the message |
+| `name_filter` | — | Exact tag match |
+| `device_id` | — | Restrict to one device |
+| `threshold` | `1` | Matches needed before firing |
+| `window_secs` | `300` | Counting window |
+| `cooldown_secs` | `900` | Silence after firing |
+| `secret` | — | HMAC key, or the PagerDuty routing key |
+| `enabled` | `true` | |
+
+`400` if the URL is rejected by the guard or the format is unknown.
+
+### `PATCH /api/v1/alerts/{id}` — viewer
+
+`{"enabled": false}`. Returns `204`.
+
+### `DELETE /api/v1/alerts/{id}` — viewer
+
+`204`. Returns `400` if there is no such rule.
+
+### `POST /api/v1/alerts/{id}/test` — viewer
+
+Delivers a synthetic alert down the real path, ignoring threshold and cooldown.
+Returns the payload that was queued, so you can see the exact shape your
+endpoint will receive.
+
 ### `POST /mcp` — viewer
 
 Model Context Protocol endpoint, JSON-RPC 2.0, for AI agents. `GET /mcp`

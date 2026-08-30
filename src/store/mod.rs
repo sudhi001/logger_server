@@ -1,5 +1,6 @@
 //! Storage facade: id allocation, the bounded write queue, and the read pool.
 
+pub mod alerts;
 pub mod devices;
 pub mod reader;
 pub mod retention;

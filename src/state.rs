@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
+use crate::alerts::engine::AlertEngine;
 use crate::auth::session::Sessions;
 use crate::config::Config;
 use crate::hub::Hub;
@@ -20,6 +21,7 @@ pub struct Metrics {
     pub sse_evicted: AtomicU64,
     pub sse_opened: AtomicU64,
     pub auth_failures: AtomicU64,
+    pub alerts_fired: AtomicU64,
 }
 
 pub struct AppState {
@@ -28,6 +30,7 @@ pub struct AppState {
     pub hub: Hub,
     pub limiter: Option<Arc<IpLimiter>>,
     pub devices: Arc<DeviceCache>,
+    pub alerts: AlertEngine,
     pub sessions: Sessions,
     pub metrics: Metrics,
     /// Fires once on shutdown so in-flight SSE streams terminate instead of
@@ -48,5 +51,23 @@ impl AppState {
 
     pub fn device_name(&self, identity: &DeviceIdentity) -> String {
         identity.name.clone()
+    }
+
+    /// The channel fired alerts go down, so a manual test can use the same
+    /// delivery path as a real one rather than a parallel implementation.
+    pub fn alerts_test_sender(&self) -> tokio::sync::mpsc::Sender<crate::model::AlertEvent> {
+        self.alerts.sender()
+    }
+
+    /// Rebuilds the in-memory rule set from the database. Called at boot and
+    /// whenever a rule is added, toggled or removed.
+    pub fn reload_alerts(&self) {
+        match self
+            .store
+            .with_admin(|conn, _| crate::store::alerts::list(conn))
+        {
+            Ok(rules) => self.alerts.reload(rules),
+            Err(e) => tracing::error!(error = %e, "could not load alert rules"),
+        }
     }
 }

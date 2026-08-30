@@ -24,7 +24,8 @@ use tower_http::trace::TraceLayer;
 use crate::assets;
 use crate::auth;
 use crate::handlers::{
-    auth as auth_handlers, devices, health, ingest, mcp as handlers_mcp, query, stream,
+    alerts as handlers_alerts, auth as auth_handlers, devices, health, ingest, mcp as handlers_mcp,
+    query, stream,
 };
 use crate::middleware::ratelimit;
 use crate::state::AppState;
@@ -63,6 +64,15 @@ pub fn build(state: Arc<AppState>) -> Router {
         .route("/api/v1/logs/export", get(query::export))
         .route("/api/v1/devices", get(devices::list).post(devices::create))
         .route("/api/v1/devices/{id}", delete(devices::revoke))
+        .route(
+            "/api/v1/alerts",
+            get(handlers_alerts::list).post(handlers_alerts::create),
+        )
+        .route(
+            "/api/v1/alerts/{id}",
+            delete(handlers_alerts::delete).patch(handlers_alerts::set_enabled),
+        )
+        .route("/api/v1/alerts/{id}/test", post(handlers_alerts::test))
         .route("/metrics", get(health::metrics))
         // Agents authenticate with the same admin credential as the dashboard.
         .route(

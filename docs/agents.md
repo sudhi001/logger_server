@@ -74,6 +74,7 @@ curl -s -X POST https://your-logger.example.com/mcp \
 | `get_log_stats` | Counts by level, device and tag over a window, plus the time range covered |
 | `get_recent_logs` | The newest lines, when there is no search term |
 | `list_devices` | Map device ids to names; see which builds are still reporting |
+| `list_alerts` | Read alert rules and whether their webhooks are delivering |
 | `write_log` | Write a line, e.g. to annotate an investigation *(write mode and above)* |
 | `create_device` | Register a device and return its token *(admin mode only)* |
 | `revoke_device` | Revoke a device's token, immediately and permanently *(admin mode only)* |
@@ -117,6 +118,15 @@ understand what you are accepting:
 > description says it is destructive and needs explicit human intent. Those help;
 > they are not a guarantee. If the agent is not one you control end to end, use
 > `read`.
+
+### Alert rules are read-only, always
+
+An agent can read alert rules at any access level, but cannot create or delete
+them even in `admin` mode. Creating a rule hands the server a URL it will POST
+your log contents to, so a log line written to look like an instruction could
+otherwise talk an agent into sending your logs somewhere an attacker controls.
+The [outbound guard](alerting.md#outbound-safety) blocks internal addresses but
+cannot help with exfiltration to a public one, so this stays a human action.
 
 To turn the endpoint off entirely:
 

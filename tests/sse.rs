@@ -37,7 +37,7 @@ async fn start(mutate: impl FnOnce(&mut Config)) -> Harness {
     cfg.port = 0;
     mutate(&mut cfg);
 
-    let (state, writer, shutdown) = build_state(cfg).expect("state");
+    let (state, writer, shutdown, _alert_rx) = build_state(cfg).expect("state");
     let app = routes::build(state);
 
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))

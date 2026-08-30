@@ -32,9 +32,11 @@ pub fn lookup(path: &str) -> Option<Asset> {
         "/" | "/index.html" => asset!("index.html", HTML, "index"),
         "/login.html" => asset!("login.html", HTML, "login"),
         "/devices.html" => asset!("devices.html", HTML, "devices"),
+        "/alerts.html" => asset!("alerts.html", HTML, "alerts"),
         "/app.js" => asset!("app.js", JS, "appjs"),
         "/login.js" => asset!("login.js", JS, "loginjs"),
         "/devices.js" => asset!("devices.js", JS, "devicesjs"),
+        "/alerts.js" => asset!("alerts.js", JS, "alertsjs"),
         "/app.css" => asset!("app.css", CSS, "appcss"),
         _ => None,
     }

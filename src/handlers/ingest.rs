@@ -89,6 +89,9 @@ fn to_record(
 /// Publishes to SSE subscribers and queues the durable write.
 fn dispatch(state: &AppState, rec: LogRecord) -> Result<(), AppError> {
     state.hub.publish(Arc::new(LogFrame::new(&rec)));
+    // Cheap: the level test rejects almost every line before anything else runs,
+    // and a fired rule is handed to a background task rather than delivered here.
+    state.alerts.observe(&rec);
     match state.store.enqueue(rec) {
         Ok(()) => {
             state.metrics.ingested.fetch_add(1, Ordering::Relaxed);
@@ -116,6 +119,7 @@ pub async fn ingest_one(
 
     if params.sync {
         state.hub.publish(Arc::new(LogFrame::new(&rec)));
+        state.alerts.observe(&rec);
         let wait = state.store.enqueue_sync(rec).inspect_err(|_| {
             state.metrics.shed.fetch_add(1, Ordering::Relaxed);
         })?;

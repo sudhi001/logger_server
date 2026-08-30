@@ -3,6 +3,13 @@
 //! Descriptions here are read by the model, so they say *when* to reach for a
 //! tool rather than only what it does — that is what makes an agent pick the
 //! right one instead of dumping the last thousand lines and guessing.
+//!
+//! Alert rules are readable but not writable from here, at any access level.
+//! Creating one means handing the server a URL it will POST your log contents
+//! to, so a log line crafted to read like an instruction could otherwise talk
+//! an agent into exfiltrating logs to an address the attacker controls. The
+//! outbound guard blocks internal addresses but cannot help with that, so rule
+//! creation stays a human action through the dashboard or the API.
 
 use serde_json::{json, Value};
 
@@ -125,6 +132,15 @@ pub fn list(access: Access) -> Vec<Value> {
                     "device_id": { "type": "integer" }
                 }
             }
+        }),
+        json!({
+            "name": "list_alerts",
+            "description":
+                "List configured alert rules: what each matches, when it fires, where it \
+                 delivers, and whether recent deliveries succeeded. Useful for answering \
+                 'would we have been told about this?' and for spotting a webhook that has \
+                 been failing silently.",
+            "inputSchema": { "type": "object", "properties": {} }
         }),
         json!({
             "name": "list_devices",

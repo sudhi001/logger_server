@@ -176,6 +176,22 @@ async fn run(state: &Arc<AppState>, name: &str, a: &Value) -> Result<String, Str
             Ok(pretty(&s))
         }
 
+        "list_alerts" => {
+            let list = state
+                .store
+                .with_admin(|conn, _| crate::store::alerts::list(conn))
+                .map_err(|e| e.to_string())?;
+            if list.is_empty() {
+                return Ok(
+                    "No alert rules are configured, so nothing will notify anyone when \
+                           something breaks. Rules are created from the dashboard's Alerts \
+                           page or POST /api/v1/alerts."
+                        .into(),
+                );
+            }
+            Ok(pretty(&list))
+        }
+
         "list_devices" => {
             let list = state
                 .store

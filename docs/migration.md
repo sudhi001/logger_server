@@ -37,7 +37,7 @@ exposure than the writes.
 docker run -d --name logger -p 8080:8080 \
   -e LOGGER_ADMIN_TOKEN="$(openssl rand -hex 24)" \
   -v logger-data:/data \
-  sudhis/logger_server:3.0.0
+  sudhis/logger_server:3.2.0
 ```
 
 Your existing database is migrated in place at startup — a `device_id` column is

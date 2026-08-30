@@ -129,6 +129,101 @@ pub struct LogContext {
     pub after: Vec<LogRecord>,
 }
 
+/// How a webhook body is shaped. Slack, Discord and PagerDuty each accept a
+/// specific JSON shape; `Generic` is our own documented one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AlertFormat {
+    Generic,
+    Slack,
+    Discord,
+    Pagerduty,
+}
+
+impl AlertFormat {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "generic" => Some(Self::Generic),
+            "slack" => Some(Self::Slack),
+            "discord" => Some(Self::Discord),
+            "pagerduty" => Some(Self::Pagerduty),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Generic => "generic",
+            Self::Slack => "slack",
+            Self::Discord => "discord",
+            Self::Pagerduty => "pagerduty",
+        }
+    }
+}
+
+/// A configured alert.
+#[derive(Debug, Clone, Serialize)]
+pub struct AlertRule {
+    pub id: i64,
+    pub name: String,
+    pub enabled: bool,
+    pub min_level: u8,
+    pub device_id: Option<i64>,
+    pub name_filter: Option<String>,
+    pub contains: Option<String>,
+    pub threshold: i64,
+    pub window_secs: i64,
+    pub cooldown_secs: i64,
+    pub url: String,
+    pub format: AlertFormat,
+    /// Whether a signing secret is set. The secret itself is never returned.
+    pub signed: bool,
+    pub created_at: i64,
+    pub last_fired_at: Option<i64>,
+    pub fire_count: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewAlertRule {
+    pub name: String,
+    pub url: String,
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub min_level: Option<u8>,
+    #[serde(default)]
+    pub device_id: Option<i64>,
+    #[serde(default)]
+    pub name_filter: Option<String>,
+    #[serde(default)]
+    pub contains: Option<String>,
+    #[serde(default)]
+    pub threshold: Option<i64>,
+    #[serde(default)]
+    pub window_secs: Option<i64>,
+    #[serde(default)]
+    pub cooldown_secs: Option<i64>,
+    /// Optional HMAC-SHA256 signing secret, so the receiver can verify us.
+    #[serde(default)]
+    pub secret: Option<String>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+}
+
+/// What actually gets delivered: the rule that fired, why, and a sample.
+#[derive(Debug, Clone, Serialize)]
+pub struct AlertEvent {
+    pub rule_id: i64,
+    pub rule_name: String,
+    /// How many matches inside the window triggered this.
+    pub count: i64,
+    pub window_secs: i64,
+    pub fired_at: i64,
+    /// The log line that tipped it over.
+    pub trigger: LogRecord,
+}
+
 pub fn level_label(level: u8) -> &'static str {
     LEVEL_NAMES.get(level as usize).copied().unwrap_or("info")
 }

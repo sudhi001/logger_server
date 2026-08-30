@@ -53,12 +53,17 @@ fn main() -> std::process::ExitCode {
 async fn run(cfg: Config) -> Result<(), Box<dyn std::error::Error>> {
     let port = cfg.port;
     let workers = cfg.workers;
-    let (state, writer, shutdown_tx) = build_state(cfg)?;
+    let (state, writer, shutdown_tx, alert_rx) = build_state(cfg)?;
 
     if let Some(limiter) = state.limiter.clone() {
         ratelimit::spawn_janitor(limiter);
     }
     spawn_session_janitor(state.clone());
+    // One task owns webhook delivery, so a slow endpoint cannot affect ingest.
+    tokio::spawn(logger_server::alerts::delivery::run(
+        state.clone(),
+        alert_rx,
+    ));
 
     if state.devices.is_empty() {
         tracing::warn!(

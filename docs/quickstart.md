@@ -8,7 +8,7 @@ Getting from nothing to a live log tail. Should take about two minutes.
 docker run -d --name logger -p 8080:8080 \
   -e LOGGER_ADMIN_TOKEN=pick-a-long-random-string \
   -v logger-data:/data \
-  sudhis/logger_server:3.0.0
+  sudhis/logger_server:3.2.0
 ```
 
 Two flags worth understanding:
@@ -108,5 +108,6 @@ and reachable through [the API](api.md).
 ## Next
 
 - [Connect your app](clients.md)
+- [Get alerted when something breaks](alerting.md)
 - [Deploy it somewhere](deployment.md)
 - [Tune it](configuration.md)

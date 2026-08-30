@@ -34,7 +34,7 @@ async fn app(mutate: impl FnOnce(&mut Config)) -> Harness {
     cfg.mcp_access = Access::Admin;
     mutate(&mut cfg);
 
-    let (state, writer, shutdown) = build_state(cfg).expect("state");
+    let (state, writer, shutdown, _alert_rx) = build_state(cfg).expect("state");
     std::mem::forget(shutdown);
     let app = routes::build(state);
 

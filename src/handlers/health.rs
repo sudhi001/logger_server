@@ -52,7 +52,10 @@ pub async fn metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
          logger_devices_active {}\n\
          # HELP logger_sessions_active Dashboard sessions currently valid.\n\
          # TYPE logger_sessions_active gauge\n\
-         logger_sessions_active {}\n",
+         logger_sessions_active {}\n\
+         # HELP logger_alert_rules_active Enabled alert rules.\n\
+         # TYPE logger_alert_rules_active gauge\n\
+         logger_alert_rules_active {}\n",
         m.ingested.load(Ordering::Relaxed),
         m.shed.load(Ordering::Relaxed),
         m.rate_limited.load(Ordering::Relaxed),
@@ -63,6 +66,7 @@ pub async fn metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         m.auth_failures.load(Ordering::Relaxed),
         state.devices.len(),
         state.sessions.len(),
+        state.alerts.active_count(),
     );
 
     ([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body)

@@ -26,6 +26,13 @@ pub struct Config {
     pub mcp_access: crate::mcp::tools::Access,
     /// Serve the MCP endpoint at all.
     pub mcp_enabled: bool,
+    /// Let webhooks reach private, loopback and link-local addresses. Off by
+    /// default so a webhook URL cannot be used to probe your own network.
+    pub webhook_allow_private: bool,
+    /// How this server is reached from outside, for links inside alerts.
+    pub public_url: String,
+    /// Pending alert deliveries before new ones are dropped.
+    pub alert_queue: usize,
     /// Per-IP writes per second. `0` disables rate limiting.
     pub rate_limit_rps: u32,
     pub rate_limit_burst: u32,
@@ -95,6 +102,17 @@ impl Config {
                 std::env::var("LOGGER_MCP_MODE").ok().as_deref(),
             ),
             mcp_enabled: env_parse("LOGGER_MCP_ENABLED", true),
+            webhook_allow_private: env_parse("LOGGER_WEBHOOK_ALLOW_PRIVATE", false),
+            public_url: std::env::var("LOGGER_PUBLIC_URL")
+                .ok()
+                .filter(|u| !u.trim().is_empty())
+                .unwrap_or_else(|| {
+                    format!(
+                        "http://localhost:{}",
+                        env_parse::<u16>("LOGGER_PORT", env_parse("PORT", 8080))
+                    )
+                }),
+            alert_queue: env_parse::<usize>("LOGGER_ALERT_QUEUE", 256).max(8),
             rate_limit_rps: env_parse("LOGGER_RATE_LIMIT_RPS", 500),
             rate_limit_burst: env_parse("LOGGER_RATE_LIMIT_BURST", 1_000),
             trust_proxy: env_parse("LOGGER_TRUST_PROXY", false),

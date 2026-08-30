@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alerts · logger_server</title>
+  <link href="app.css" rel="stylesheet">
+</head>
+<body>
+  <div class="topbar">
+    <a href="/" class="brand">{SUDHI<span>.</span>S}</a>
+    <a href="/" class="nav-link">Logs</a>
+    <a href="/devices.html" class="nav-link">Devices</a>
+    <a href="/alerts.html" class="nav-link active">Alerts</a>
+    <div class="spacer"></div>
+    <a href="#" class="nav-link" id="logout">Sign out</a>
+  </div>
+
+  <div class="wrap">
+    <h2 style="margin-top:0">New alert</h2>
+    <p class="hint">
+      An alert fires when <b>threshold</b> matching logs arrive inside
+      <b>window</b>, then stays quiet for <b>cooldown</b> — so a crash loop sends
+      one message, not a thousand. Send a test after creating it; finding out
+      your webhook is misconfigured during an incident is the whole thing worth
+      avoiding.
+    </p>
+
+    <form id="form">
+      <div class="row-form">
+        <input type="text" id="name" placeholder="alert name, e.g. Checkout errors" required>
+        <input type="text" id="url" placeholder="https://hooks.slack.com/services/…" required style="flex:2 1 320px">
+        <select id="format">
+          <option value="generic">generic JSON</option>
+          <option value="slack">Slack</option>
+          <option value="discord">Discord</option>
+          <option value="pagerduty">PagerDuty</option>
+        </select>
+      </div>
+      <div class="row-form">
+        <select id="min_level" title="Minimum level to match">
+          <option value="4" selected>errors only</option>
+          <option value="3">warnings and errors</option>
+          <option value="2">info and above</option>
+        </select>
+        <input type="text" id="contains" placeholder="message contains… (optional)">
+        <input type="text" id="name_filter" placeholder="tag, e.g. [Net] (optional)">
+      </div>
+      <div class="row-form">
+        <input type="number" id="threshold" placeholder="threshold" value="1" min="1" title="How many matches before firing">
+        <input type="number" id="window_secs" placeholder="window (s)" value="300" min="1" title="Counting window, seconds">
+        <input type="number" id="cooldown_secs" placeholder="cooldown (s)" value="900" min="0" title="Silence after firing, seconds">
+        <input type="text" id="secret" placeholder="signing secret / PagerDuty routing key (optional)">
+        <button type="submit" class="primary">Create alert</button>
+      </div>
+    </form>
+
+    <div class="error-msg" id="err"></div>
+
+    <h2>Alerts</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th><th>Matches</th><th>Fires when</th>
+          <th>Target</th><th>Last fired</th><th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="hint" id="empty" hidden>No alerts yet. Nothing will notify you when something breaks.</p>
+  </div>
+
+  <script src="alerts.js"></script>
+</body>
+</html>

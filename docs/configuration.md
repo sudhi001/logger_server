@@ -48,6 +48,18 @@ server starts correctly with nothing set — though you should always set
 > device tokens. Agents read log text, which is influenced by whatever your app
 > was given; see [agents.md](agents.md) for the trade-off in full.
 
+## Alerting
+
+| Variable | Default | What it does |
+|---|---|---|
+| `LOGGER_WEBHOOK_ALLOW_PRIVATE` | `false` | Let webhooks reach private, loopback and link-local addresses |
+| `LOGGER_PUBLIC_URL` | `http://localhost:PORT` | How this server is reached, for links inside alerts |
+| `LOGGER_ALERT_QUEUE` | `256` | Pending deliveries before new alerts are dropped |
+
+> Leaving `LOGGER_WEBHOOK_ALLOW_PRIVATE` off is what stops a webhook URL being
+> used to probe your own network or read a cloud metadata endpoint. Turn it on
+> only for a deliberate internal relay. See [alerting.md](alerting.md).
+
 ## Retention
 
 | Variable | Default | What it does |

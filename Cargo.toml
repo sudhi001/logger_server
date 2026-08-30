@@ -1,6 +1,6 @@
 [package]
 name = "logger_server"
-version = "3.1.0"
+version = "3.2.0"
 edition = "2021"
 rust-version = "1.80"
 description = "Remote log sink for mobile application developers"
@@ -23,7 +23,13 @@ tracing = "0.1"
 # Token hashing: API tokens are high-entropy random values, so a plain digest
 # is the right primitive here — a slow password KDF would buy nothing.
 sha2 = "0.11"
+hmac = "0.13"
 getrandom = "0.4"
+# Outbound webhook delivery. rustls with compiled-in roots is not a preference:
+# the scratch image has no CA bundle, so the system trust store is not there to
+# read. default-features off keeps native-tls and cookies out of the binary.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "webpki-roots", "json", "charset", "http2"] }
+url = "2"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
